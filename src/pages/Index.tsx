@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { computeAll, type InputData, calcQ, applyMargin } from "@/lib/hoodCalc";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
+// import jsPDF from "jspdf";
 import { ELECTRO_FILTERS } from "@/lib/electroFilters";
 
 const formato = (n: number, dec = 2) =>
@@ -113,7 +113,8 @@ const Index = () => {
     toast.success("CSV exportado");
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     const line = (y: number, text: string) => doc.text(text, 14, y);
 
