@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { computeAll, type InputData } from "@/lib/hoodCalc";
+import { computeAll, type InputData, calcQ, applyMargin } from "@/lib/hoodCalc";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
+import { ELECTRO_FILTERS } from "@/lib/electroFilters";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
@@ -34,6 +35,13 @@ const Index = () => {
     perdidaSalidaPa: 50,
   });
 
+  // Filtro electrostático
+  const [filtroOn, setFiltroOn] = useState(false);
+  const [modeloFiltro, setModeloFiltro] = useState<string | undefined>(undefined);
+  const selectedFiltro = useMemo(() => ELECTRO_FILTERS.find(f => f.modelo === modeloFiltro), [modeloFiltro]);
+  const [dpFiltroLimpio, setDpFiltroLimpio] = useState<number | undefined>(undefined);
+  const [estadoSucio, setEstadoSucio] = useState(false);
+
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
     setData((d) => ({
@@ -42,8 +50,30 @@ const Index = () => {
     }));
   }, [data.tipoCampana]);
 
-  const results = useMemo(() => computeAll(data), [data]);
+  const { results, filtroClamped, filtroDpTotal } = useMemo(() => {
+    const Qsin = data.caudalDiseno && data.caudalDiseno > 0
+      ? data.caudalDiseno
+      : calcQ(data.tipoCampana, data.L, data.F, data.velocidadCaptura);
+    const QpreMargin = applyMargin(Qsin, data.margenCaudalPct);
 
+    const maxQ = filtroOn && selectedFiltro ? selectedFiltro.caudalMax : Infinity;
+    const clampedQ = Math.min(QpreMargin, maxQ);
+    const caudalDisenoOverride = clampedQ / (1 + data.margenCaudalPct / 100);
+
+    const dpFiltroBase = dpFiltroLimpio ?? selectedFiltro?.dpFiltroLimpioPa ?? 0;
+    const dpFiltroEff = dpFiltroBase * (estadoSucio ? 1.5 : 1);
+    const dpCarbon = selectedFiltro?.dpCarbonPa ?? 0;
+    const dpFiltroTotal = filtroOn && selectedFiltro ? dpFiltroEff + dpCarbon : 0;
+
+    const inputForCompute: InputData = {
+      ...data,
+      caudalDiseno: filtroOn && selectedFiltro ? caudalDisenoOverride : data.caudalDiseno,
+      perdidaFiltrosPa: data.perdidaFiltrosPa + dpFiltroTotal,
+    };
+
+    const r = computeAll(inputForCompute);
+    return { results: r, filtroClamped: filtroOn && selectedFiltro ? QpreMargin > maxQ : false, filtroDpTotal: dpFiltroTotal };
+  }, [data, filtroOn, selectedFiltro, dpFiltroLimpio, estadoSucio]);
   const onChange = (field: keyof InputData, value: any) => {
     setData((d) => ({ ...d, [field]: value }));
   };
@@ -316,6 +346,90 @@ const Index = () => {
 
               <Separator />
 
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Filtro electrostático</Label>
+                  <Switch checked={filtroOn} onCheckedChange={setFiltroOn} />
+                </div>
+
+                {filtroOn && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Modelo</Label>
+                      <Select value={modeloFiltro ?? ""} onValueChange={(v) => setModeloFiltro(v)}>
+                        <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
+                        <SelectContent>
+                          {ELECTRO_FILTERS.map((f) => (
+                            <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Δp filtro limpio (Pa)</Label>
+                      <Input
+                        type="number"
+                        placeholder={selectedFiltro?.dpFiltroLimpioPa !== undefined ? String(selectedFiltro.dpFiltroLimpioPa) : "Introduce valor"}
+                        value={dpFiltroLimpio ?? (selectedFiltro?.dpFiltroLimpioPa ?? "")}
+                        onChange={(e) =>
+                          setDpFiltroLimpio(e.target.value ? parseFloat(e.target.value) : undefined)
+                        }
+                      />
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Puedes ajustar para estado sucio (+50%).
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2">
+                      <Switch checked={estadoSucio} onCheckedChange={setEstadoSucio} />
+                      <Label>Estado sucio (+50%)</Label>
+                    </div>
+
+                    {selectedFiltro && (
+                      <div className="sm:col-span-2">
+                        <div className="rounded-md border p-3 text-sm">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <div className="text-xs text-muted-foreground">Caudal máx.</div>
+                              <div className="font-medium">{formato(selectedFiltro.caudalMax,0)} m³/h</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Δp carbón</div>
+                              <div className="font-medium">{selectedFiltro.dpCarbonPa} Pa</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Δp total filtro</div>
+                              <div className="font-medium">{formato(filtroDpTotal ?? 0,0)} Pa</div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+                            <div>
+                              <div className="text-xs text-muted-foreground">Ventilador recomendado</div>
+                              <div className="font-medium">{selectedFiltro.ventilador} ({selectedFiltro.potenciaKw} kW)</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Dimensiones A×B×C</div>
+                              <div className="font-medium">{selectedFiltro.dimensiones}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Tolvas Ø asp/imp</div>
+                              <div className="font-medium">{selectedFiltro.tolvaAspMm} / {selectedFiltro.tolvaImpMm} mm</div>
+                            </div>
+                          </div>
+                          {filtroClamped && (
+                            <div className="mt-3 text-xs text-amber-600">
+                              Caudal limitado al máximo del filtro seleccionado.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <Label>Lugar de expulsión</Label>
@@ -380,13 +494,16 @@ const Index = () => {
                   <p className="text-sm text-muted-foreground">{results.recomendacionVentilador}</p>
                 </div>
 
-                {results.avisos.length > 0 && (
+                {(results.avisos.length > 0 || filtroClamped) && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Avisos</h3>
                     <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
                       {results.avisos.map((a, i) => (
                         <li key={i}>{a}</li>
                       ))}
+                      {filtroClamped && (
+                        <li>Caudal limitado al máximo del filtro seleccionado.</li>
+                      )}
                     </ul>
                   </div>
                 )}
