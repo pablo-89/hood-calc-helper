@@ -54,6 +54,45 @@ const EQ_LEN = {
   compuertas: 2,
 };
 
+// New modular API aligning with requested signatures
+export function calcCaudal(type: HoodType, L: number, F: number, vap: number): number {
+  const perimetroLibre = type === "mural" ? L + 2 * F : 2 * L + 2 * F;
+  return perimetroLibre * vap * 3600; // m3/h
+}
+
+export function calcConducto(Q: number, Vd: number): { A: number; D: number } {
+  const Qs = Q / 3600; // m3/s
+  const A = Qs / Vd; // m2
+  const D = Math.sqrt((4 * A) / Math.PI); // m
+  return { A, D };
+}
+
+export function calcPerdidas(
+  conducto: { Leq: number; friccionPaPorM: number },
+  accesorios: AccessoryCounts,
+  filtro?: { perdidasPa?: number },
+  salida?: { perdidasPa?: number }
+): number {
+  const Leq = calcLeq(conducto.Leq, accesorios);
+  const deltaPf = conducto.friccionPaPorM * Leq;
+  const total = deltaPf + (filtro?.perdidasPa ?? 0) + (salida?.perdidasPa ?? 0);
+  return total;
+}
+
+export interface Ventilador {
+  modelo?: string;
+  potenciaKw?: number;
+  caudalMin: number; // m3/h
+  deltaPmin: number; // Pa
+}
+
+export function selectVentilador(Q: number, deltaP: number): Ventilador | null {
+  // Placeholder selector. In absence of a catalog, recommend with 25% margin
+  const caudalMin = Math.ceil(Q * 1.0);
+  const deltaPmin = Math.ceil(deltaP * 1.25);
+  return { caudalMin, deltaPmin };
+}
+
 export function calcQ(tipo: HoodType, L: number, F: number, Vap: number): number {
   const perimetroLibre = tipo === "mural" ? L + 2 * F : 2 * L + 2 * F;
   return perimetroLibre * Vap * 3600; // m3/h
