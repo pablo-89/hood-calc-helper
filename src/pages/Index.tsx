@@ -149,21 +149,43 @@ const Index = () => {
   const exportPDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 14;
+    const bottomMargin = 12;
     let y = 18;
+
+    const ensureSpace = (lines = 1, lineHeight = 6) => {
+      if (y + lines * lineHeight > pageHeight - bottomMargin) {
+        doc.addPage();
+        y = 18;
+      }
+    };
 
     const line = (text: string, opts?: { bold?: boolean }) => {
       if (opts?.bold) doc.setFont(undefined, "bold"); else doc.setFont(undefined, "normal");
+      ensureSpace();
       doc.text(text, marginX, y);
       y += 7;
     };
+    const wrap = (text: string, indent = 0, lh = 6) => {
+      const lines = doc.splitTextToSize(text, pageWidth - marginX * 2 - indent);
+      lines.forEach((l) => {
+        ensureSpace(1, lh);
+        doc.text(l, marginX + indent, y);
+        y += lh;
+      });
+    };
+    const bullets = (items: string[], indent = 2) => {
+      items.forEach((it) => wrap(`• ${it}`, indent));
+    };
     const sep = (title?: string) => {
-      y += 2;
+      ensureSpace(1, 4);
       doc.setDrawColor(180);
       doc.line(marginX, y, pageWidth - marginX, y);
       y += 6;
       if (title) {
         doc.setFont(undefined, "bold");
+        ensureSpace();
         doc.text(title, marginX, y);
         y += 6;
       }
@@ -225,30 +247,35 @@ const Index = () => {
     kv("Q aporte", `${Math.round((aportePct / 100) * results.Q)} m³/h`);
 
     sep("Selección de ventilador");
-    line(results.recomendacionVentilador);
+    const reqQ = Math.round(results.Q);
+    const reqDp = Math.round(results.deltaPtotal * 1.25);
+    kv("Q requerido", `${reqQ} m³/h`);
+    kv("Δp requerido", `${reqDp} Pa (margen 25%)`);
+    if (selectedFiltro) kv("Modelo orientativo", `${selectedFiltro.ventilador} (${selectedFiltro.potenciaKw} kW)`);
 
     if (validation.formErrors.length > 0 || validation.warnings.length > 0) {
       sep("Avisos y verificaciones");
-      validation.formErrors.forEach((e) => line(`- ${e}`));
-      validation.warnings.forEach((e) => line(`- ${e}`));
+      bullets([...validation.formErrors, ...validation.warnings]);
       if (filtroOn && selectedFiltro && (validation as any).QpreMargin && (validation as any).QpreMargin > selectedFiltro.caudalMax) {
-        line(`- El caudal calculado supera el máximo del filtro seleccionado.`);
+        bullets(["El caudal calculado supera el máximo del filtro seleccionado."]);
       }
     }
 
     sep("Recomendaciones");
-    line("- Ajustar altura según combustible y normativa aplicable.");
-    line("- Mantenimiento y limpieza de filtros cada ~500 h de uso.");
-    line("- Verificar niveles de ruido según exigencias del local.");
+    bullets([
+      "Ajustar altura según combustible y normativa aplicable.",
+      "Mantenimiento y limpieza de filtros cada ~500 h de uso.",
+      "Verificar niveles de ruido según exigencias del local.",
+    ]);
 
     if (entrega.observaciones) {
       sep("Observaciones");
-      line(entrega.observaciones);
+      wrap(entrega.observaciones);
     }
 
     // Firmas
     y += 6;
-    if (y > 260) { doc.addPage(); y = 20; }
+    ensureSpace();
     doc.setDrawColor(0);
     doc.line(marginX, y, marginX + 60, y);
     doc.line(pageWidth - marginX - 60, y, pageWidth - marginX, y);
