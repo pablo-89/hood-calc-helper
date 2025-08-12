@@ -14,6 +14,7 @@ import { ELECTRO_FILTERS } from "@/lib/electroFilters";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { validateInput } from "@/lib/validation";
+import { computeBOM } from "@/lib/budget";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
@@ -68,6 +69,7 @@ const Index = () => {
     telefono: "",
     observaciones: "",
   });
+  const [tipoInforme, setTipoInforme] = useState<"cliente" | "tecnico">("cliente");
 
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
@@ -197,7 +199,11 @@ const Index = () => {
     // Encabezado
     doc.setFontSize(16);
     doc.setFont(undefined, "bold");
-    doc.text("Informe de entrega - Campana de extracción", marginX, y);
+    doc.text(
+      tipoInforme === "cliente" ? "Informe de oferta - Sistema de extracción" : "Memoria técnica - Sistema de extracción",
+      marginX,
+      y
+    );
     y += 8;
     doc.setFontSize(10);
     doc.setFont(undefined, "normal");
@@ -213,7 +219,7 @@ const Index = () => {
     if (entrega.email) kv("Email", entrega.email);
     if (entrega.telefono) kv("Teléfono", entrega.telefono);
 
-    sep("Solución propuesta");
+    sep(tipoInforme === "cliente" ? "Solución propuesta" : "Datos de diseño");
     kv("Tipo de campana", data.tipoCampana);
     kv("Dimensiones (L x F)", `${data.L} m x ${data.F} m`);
     kv("Altura instalación", `${data.alturaInstalacion} m`);
@@ -227,7 +233,7 @@ const Index = () => {
       kv("Tolvas Ø asp/imp", `${selectedFiltro.tolvaAspMm} / ${selectedFiltro.tolvaImpMm} mm`);
     }
 
-    sep("Resultados de cálculo");
+    sep(tipoInforme === "cliente" ? "Parámetros principales" : "Resultados de cálculo");
     kv("Q", `${results.Q.toFixed(0)} m³/h (${results.Qs.toFixed(3)} m³/s)`);
     kv("Sección requerida", `${results.Areq.toFixed(3)} m² (Vd = ${data.velocidadDucto} m/s)`);
     kv("Diámetro equivalente", `${results.Dmm.toFixed(0)} mm`);
@@ -236,7 +242,7 @@ const Index = () => {
     kv("Δp total", `${results.deltaPtotal.toFixed(0)} Pa`);
     if (results.VrectActual) kv("Velocidad en conducto rectangular", `${results.VrectActual.toFixed(2)} m/s`);
 
-    sep("Desglose de pérdidas");
+    if (tipoInforme === "tecnico") sep("Desglose de pérdidas");
     kv("Conducto recto", `${Math.round(data.friccionPaPorM * data.longitudConducto)} Pa`);
     kv("Accesorios (equivalente)", `${Math.round(data.friccionPaPorM * Math.max(0, results.Leq - data.longitudConducto))} Pa`);
     kv("Filtros + carbón", `${Math.round((data.perdidaFiltrosPa || 0) + (filtroDpTotal || 0))} Pa`);
@@ -253,7 +259,7 @@ const Index = () => {
     kv("Δp requerido", `${reqDp} Pa (margen 25%)`);
     if (selectedFiltro) kv("Modelo orientativo", `${selectedFiltro.ventilador} (${selectedFiltro.potenciaKw} kW)`);
 
-    if (validation.formErrors.length > 0 || validation.warnings.length > 0) {
+    if (tipoInforme === "tecnico" && (validation.formErrors.length > 0 || validation.warnings.length > 0)) {
       sep("Avisos y verificaciones");
       bullets([...validation.formErrors, ...validation.warnings]);
       if (filtroOn && selectedFiltro && (validation as any).QpreMargin && (validation as any).QpreMargin > selectedFiltro.caudalMax) {
@@ -261,12 +267,24 @@ const Index = () => {
       }
     }
 
-    sep("Recomendaciones");
-    bullets([
-      "Ajustar altura según combustible y normativa aplicable.",
-      "Mantenimiento y limpieza de filtros cada ~500 h de uso.",
-      "Verificar niveles de ruido según exigencias del local.",
-    ]);
+    if (tipoInforme === "cliente") {
+      sep("Resumen de oferta");
+      const bom = computeBOM({
+        longitudConducto: data.longitudConducto,
+        accesorios: data.accesorios,
+        diametroMm: results.Dmm,
+        ventiladorSugerido: selectedFiltro?.ventilador,
+        electroFiltroModelo: filtroOn ? selectedFiltro?.modelo : undefined,
+      });
+      bullets(bom.items.map(i => `${i.descripcion} — ${i.cantidad} ${i.unidad}`));
+    } else {
+      sep("Recomendaciones");
+      bullets([
+        "Ajustar altura según combustible y normativa aplicable.",
+        "Mantenimiento y limpieza de filtros cada ~500 h de uso.",
+        "Verificar niveles de ruido según exigencias del local.",
+      ]);
+    }
 
     if (entrega.observaciones) {
       sep("Observaciones");
@@ -296,6 +314,29 @@ const Index = () => {
 
     doc.save("informe_campana_cliente.pdf");
     toast.success("Informe PDF exportado");
+  };
+
+  const exportBOMCSV = () => {
+    const bom = computeBOM({
+      longitudConducto: data.longitudConducto,
+      accesorios: data.accesorios,
+      diametroMm: results.Dmm,
+      ventiladorSugerido: selectedFiltro?.ventilador,
+      electroFiltroModelo: filtroOn ? selectedFiltro?.modelo : undefined,
+    });
+    const rows = [
+      ["Código", "Descripción", "Unidad", "Cantidad"],
+      ...bom.items.map(i => [i.codigo, i.descripcion, i.unidad, String(i.cantidad)]),
+    ];
+    const csv = rows.map(r => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "presupuesto_bom.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("BOM exportado");
   };
 
   // Desglose de pérdidas
@@ -622,6 +663,16 @@ const Index = () => {
                 <TabsContent value="salida" className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
+                      <Label>Tipo de informe</Label>
+                      <Select value={tipoInforme} onValueChange={(v) => setTipoInforme(v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cliente">Cliente (oferta)</SelectItem>
+                          <SelectItem value="tecnico">Técnico (memoria)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
                       <Label>Lugar de expulsión</Label>
                       <Select value={data.lugarExpulsion} onValueChange={(v) => onChange("lugarExpulsion", v)}>
                         <SelectTrigger><SelectValue placeholder="Lugar" /></SelectTrigger>
@@ -725,6 +776,7 @@ const Index = () => {
                   <div className="flex gap-3 pt-2">
                     <Button variant="hero" className="hover-lift" onClick={exportPDF}>Exportar PDF</Button>
                     <Button variant="secondary" className="hover-lift" onClick={exportCSV}>Exportar CSV</Button>
+                    <Button variant="secondary" className="hover-lift" onClick={exportBOMCSV}>Exportar BOM</Button>
                   </div>
                 </TabsContent>
               </Tabs>
