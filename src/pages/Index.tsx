@@ -55,6 +55,19 @@ const Index = () => {
   // Wizard tab y aporte de aire
   const [activeTab, setActiveTab] = useState("campana");
   const [aportePct, setAportePct] = useState<number>(90); // % del caudal extraído
+  
+  // Datos de entrega
+  const [entrega, setEntrega] = useState({
+    cliente: "",
+    proyecto: "",
+    obra: "",
+    responsable: "",
+    empresa: "",
+    nif: "",
+    email: "",
+    telefono: "",
+    observaciones: "",
+  });
 
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
@@ -135,57 +148,127 @@ const Index = () => {
 
   const exportPDF = () => {
     const doc = new jsPDF();
-    const line = (y: number, text: string) => doc.text(text, 14, y);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const marginX = 14;
+    let y = 18;
 
-    doc.setFontSize(16);
-    line(20, "Informe de cálculo de campana de extracción");
-    doc.setFontSize(11);
-
-    let y = 30;
-    const add = (label: string, value: string) => {
-      line(y, `${label}: ${value}`);
+    const line = (text: string, opts?: { bold?: boolean }) => {
+      if (opts?.bold) doc.setFont(undefined, "bold"); else doc.setFont(undefined, "normal");
+      doc.text(text, marginX, y);
       y += 7;
     };
+    const sep = (title?: string) => {
+      y += 2;
+      doc.setDrawColor(180);
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 6;
+      if (title) {
+        doc.setFont(undefined, "bold");
+        doc.text(title, marginX, y);
+        y += 6;
+      }
+    };
+    const kv = (k: string, v: string) => { line(`${k}: ${v}`); };
+    const now = new Date();
+    const fdate = now.toLocaleDateString("es-ES");
 
-    add("Tipo de campana", data.tipoCampana);
-    add("Dimensiones (L x F)", `${data.L} m x ${data.F} m`);
-    add("Altura instalación", `${data.alturaInstalacion} m`);
-    add("Tipo de cocina", data.tipoCocina);
-    if (data.potenciaTermica) add("Potencia térmica", `${data.potenciaTermica} kW`);
-    add("Velocidad de captura (Vap)", `${data.velocidadCaptura} m/s`);
-    if (data.caudalDiseno) add("Caudal de diseño", `${data.caudalDiseno} m³/h`);
+    // Encabezado
+    doc.setFontSize(16);
+    doc.setFont(undefined, "bold");
+    doc.text("Informe de entrega - Campana de extracción", marginX, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    line(`Fecha: ${fdate}`);
+    if (entrega.empresa) line(`Empresa emisora: ${entrega.empresa}`);
 
-    y += 3;
-    line(y, "Resultados");
-    y += 7;
-    add("Q", `${results.Q.toFixed(0)} m³/h (${results.Qs.toFixed(3)} m³/s)`);
-    add("Sección requerida", `${results.Areq.toFixed(3)} m² (Vd = ${data.velocidadDucto} m/s)`);
-    add("Diámetro equivalente", `${results.Dmm.toFixed(0)} mm`);
-    add("Longitud equivalente (Leq)", `${results.Leq.toFixed(1)} m`);
-    add("Δp fricción", `${results.deltaPf.toFixed(0)} Pa`);
-    add("Δp total", `${results.deltaPtotal.toFixed(0)} Pa`);
+    sep("Datos del cliente");
+    kv("Cliente", entrega.cliente || "-");
+    kv("Proyecto", entrega.proyecto || "-");
+    kv("Obra/Dirección", entrega.obra || "-");
+    kv("Responsable", entrega.responsable || "-");
+    if (entrega.nif) kv("NIF", entrega.nif);
+    if (entrega.email) kv("Email", entrega.email);
+    if (entrega.telefono) kv("Teléfono", entrega.telefono);
 
-    if (results.VrectActual) add("Velocidad en conducto rectangular", `${results.VrectActual.toFixed(2)} m/s`);
-
-    y += 3;
-    add("Recomendación ventilador", results.recomendacionVentilador);
-
-    if (results.avisos.length) {
-      y += 3;
-      line(y, "Avisos");
-      y += 7;
-      results.avisos.forEach((a) => add("-", a));
+    sep("Solución propuesta");
+    kv("Tipo de campana", data.tipoCampana);
+    kv("Dimensiones (L x F)", `${data.L} m x ${data.F} m`);
+    kv("Altura instalación", `${data.alturaInstalacion} m`);
+    kv("Tipo de cocina", data.tipoCocina);
+    if (data.potenciaTermica) kv("Potencia térmica", `${data.potenciaTermica} kW`);
+    kv("Vap (m/s)", `${data.velocidadCaptura}`);
+    if (filtroOn && selectedFiltro) {
+      kv("Filtro electrostático", selectedFiltro.modelo);
+      kv("Caudal máx. filtro", `${selectedFiltro.caudalMax} m³/h`);
+      kv("Δp carbón", `${selectedFiltro.dpCarbonPa} Pa`);
+      kv("Tolvas Ø asp/imp", `${selectedFiltro.tolvaAspMm} / ${selectedFiltro.tolvaImpMm} mm`);
     }
 
-    // Aporte
-    y += 3;
-    line(y, "Aporte de aire");
-    y += 7;
-    add("Aporte (%)", `${aportePct}%`);
-    add("Q aporte", `${Math.round((aportePct / 100) * results.Q)} m³/h`);
+    sep("Resultados de cálculo");
+    kv("Q", `${results.Q.toFixed(0)} m³/h (${results.Qs.toFixed(3)} m³/s)`);
+    kv("Sección requerida", `${results.Areq.toFixed(3)} m² (Vd = ${data.velocidadDucto} m/s)`);
+    kv("Diámetro equivalente", `${results.Dmm.toFixed(0)} mm`);
+    kv("Longitud equivalente (Leq)", `${results.Leq.toFixed(1)} m`);
+    kv("Δp por fricción", `${results.deltaPf.toFixed(0)} Pa`);
+    kv("Δp total", `${results.deltaPtotal.toFixed(0)} Pa`);
+    if (results.VrectActual) kv("Velocidad en conducto rectangular", `${results.VrectActual.toFixed(2)} m/s`);
 
-    doc.save("informe_campana.pdf");
-    toast.success("PDF exportado");
+    sep("Desglose de pérdidas");
+    kv("Conducto recto", `${Math.round(data.friccionPaPorM * data.longitudConducto)} Pa`);
+    kv("Accesorios (equivalente)", `${Math.round(data.friccionPaPorM * Math.max(0, results.Leq - data.longitudConducto))} Pa`);
+    kv("Filtros + carbón", `${Math.round((data.perdidaFiltrosPa || 0) + (filtroDpTotal || 0))} Pa`);
+    kv("Salida/terminal", `${Math.round(data.perdidaSalidaPa || 0)} Pa`);
+
+    sep("Aporte de aire");
+    kv("Aporte (%)", `${aportePct}%`);
+    kv("Q aporte", `${Math.round((aportePct / 100) * results.Q)} m³/h`);
+
+    sep("Selección de ventilador");
+    line(results.recomendacionVentilador);
+
+    if (validation.formErrors.length > 0 || validation.warnings.length > 0) {
+      sep("Avisos y verificaciones");
+      validation.formErrors.forEach((e) => line(`- ${e}`));
+      validation.warnings.forEach((e) => line(`- ${e}`));
+      if (filtroOn && selectedFiltro && (validation as any).QpreMargin && (validation as any).QpreMargin > selectedFiltro.caudalMax) {
+        line(`- El caudal calculado supera el máximo del filtro seleccionado.`);
+      }
+    }
+
+    sep("Recomendaciones");
+    line("- Ajustar altura según combustible y normativa aplicable.");
+    line("- Mantenimiento y limpieza de filtros cada ~500 h de uso.");
+    line("- Verificar niveles de ruido según exigencias del local.");
+
+    if (entrega.observaciones) {
+      sep("Observaciones");
+      line(entrega.observaciones);
+    }
+
+    // Firmas
+    y += 6;
+    if (y > 260) { doc.addPage(); y = 20; }
+    doc.setDrawColor(0);
+    doc.line(marginX, y, marginX + 60, y);
+    doc.line(pageWidth - marginX - 60, y, pageWidth - marginX, y);
+    y += 5;
+    doc.text("Firma y sello emisor", marginX, y);
+    doc.text("Conforme cliente", pageWidth - marginX - 60, y);
+
+    // Pie de página
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      const footer = `Página ${i} de ${pageCount}`;
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(footer, pageWidth - marginX, doc.internal.pageSize.getHeight() - 10, { align: "right" });
+      doc.setTextColor(0);
+    }
+
+    doc.save("informe_campana_cliente.pdf");
+    toast.success("Informe PDF exportado");
   };
 
   // Desglose de pérdidas
@@ -564,6 +647,50 @@ const Index = () => {
                       <div className="rounded-md border p-3 w-full">
                         <div className="text-xs text-muted-foreground">Caudal de aporte</div>
                         <div className="font-semibold">{formato((aportePct / 100) * results.Q, 0)} m³/h</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Datos de entrega (para informe)</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label>Cliente</Label>
+                        <Input value={entrega.cliente} onChange={(e) => setEntrega({ ...entrega, cliente: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Proyecto</Label>
+                        <Input value={entrega.proyecto} onChange={(e) => setEntrega({ ...entrega, proyecto: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Obra/Dirección</Label>
+                        <Input value={entrega.obra} onChange={(e) => setEntrega({ ...entrega, obra: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Responsable</Label>
+                        <Input value={entrega.responsable} onChange={(e) => setEntrega({ ...entrega, responsable: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Empresa emisora</Label>
+                        <Input value={entrega.empresa} onChange={(e) => setEntrega({ ...entrega, empresa: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>NIF</Label>
+                        <Input value={entrega.nif} onChange={(e) => setEntrega({ ...entrega, nif: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Email</Label>
+                        <Input value={entrega.email} onChange={(e) => setEntrega({ ...entrega, email: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Teléfono</Label>
+                        <Input value={entrega.telefono} onChange={(e) => setEntrega({ ...entrega, telefono: e.target.value })} />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label>Observaciones</Label>
+                        <Input value={entrega.observaciones} onChange={(e) => setEntrega({ ...entrega, observaciones: e.target.value })} />
                       </div>
                     </div>
                   </div>
