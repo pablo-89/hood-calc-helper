@@ -11,9 +11,19 @@ import { computeAll, type InputData, calcQ, applyMargin } from "@/lib/hoodCalc";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import { ELECTRO_FILTERS } from "@/lib/electroFilters";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { validateInput } from "@/lib/validation";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
+
+const helperText = {
+  vap: "0,30 m/s (recomendado para campana mural). 0,25 m/s para central.",
+  vd: "5–15 m/s habitual. 8–12 m/s recomendado para cocinas.",
+  alturaGas: "Altura recomendada gas: 0,70–0,80 m. Eléctrica: 0,65–0,75 m.",
+  friccion: "Fricción típica 0,6–1,5 Pa/m según rugosidad y velocidad.",
+};
 
 const Index = () => {
   const [data, setData] = useState<InputData>({
@@ -41,6 +51,10 @@ const Index = () => {
   const selectedFiltro = useMemo(() => ELECTRO_FILTERS.find(f => f.modelo === modeloFiltro), [modeloFiltro]);
   const [dpFiltroLimpio, setDpFiltroLimpio] = useState<number | undefined>(undefined);
   const [estadoSucio, setEstadoSucio] = useState(false);
+
+  // Wizard tab y aporte de aire
+  const [activeTab, setActiveTab] = useState("campana");
+  const [aportePct, setAportePct] = useState<number>(90); // % del caudal extraído
 
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
@@ -74,6 +88,10 @@ const Index = () => {
     const r = computeAll(inputForCompute);
     return { results: r, filtroClamped: filtroOn && selectedFiltro ? QpreMargin > maxQ : false, filtroDpTotal: dpFiltroTotal };
   }, [data, filtroOn, selectedFiltro, dpFiltroLimpio, estadoSucio]);
+
+  // Validación en tiempo real
+  const validation = useMemo(() => validateInput(data, { filtroOn, filtro: selectedFiltro, dpFiltroLimpio }), [data, filtroOn, selectedFiltro, dpFiltroLimpio]);
+
   const onChange = (field: keyof InputData, value: any) => {
     setData((d) => ({ ...d, [field]: value }));
   };
@@ -99,6 +117,8 @@ const Index = () => {
       { Campo: "Δp fricción (Pa)", Valor: results.deltaPf.toFixed(0) },
       { Campo: "Δp total (Pa)", Valor: results.deltaPtotal.toFixed(0) },
       { Campo: "Ventilador", Valor: results.recomendacionVentilador },
+      { Campo: "Aporte (%)", Valor: aportePct },
+      { Campo: "Q aporte (m3/h)", Valor: Math.round((aportePct / 100) * results.Q) },
     ];
     const header = Object.keys(rows[0]).join(",");
     const body = rows.map((r) => `${r["Campo"]},${r["Valor"]}`).join("\n");
@@ -157,9 +177,23 @@ const Index = () => {
       results.avisos.forEach((a) => add("-", a));
     }
 
+    // Aporte
+    y += 3;
+    line(y, "Aporte de aire");
+    y += 7;
+    add("Aporte (%)", `${aportePct}%`);
+    add("Q aporte", `${Math.round((aportePct / 100) * results.Q)} m³/h`);
+
     doc.save("informe_campana.pdf");
     toast.success("PDF exportado");
   };
+
+  // Desglose de pérdidas
+  const extraEq = results.Leq - data.longitudConducto;
+  const dpRecto = data.friccionPaPorM * data.longitudConducto;
+  const dpAcc = data.friccionPaPorM * Math.max(0, extraEq);
+  const dpFiltros = (data.perdidaFiltrosPa || 0) + (filtroDpTotal || 0);
+  const dpSalida = data.perdidaSalidaPa || 0;
 
   return (
     <>
@@ -201,270 +235,345 @@ const Index = () => {
               <CardTitle>Datos de entrada</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Tipo de campana</Label>
-                  <Select value={data.tipoCampana} onValueChange={(v) => onChange("tipoCampana", v as any)}>
-                    <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="mural">Mural (pared)</SelectItem>
-                      <SelectItem value="central">Central (isla)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Tipo de cocina/combustible</Label>
-                  <Select value={data.tipoCocina} onValueChange={(v) => onChange("tipoCocina", v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gas">Gas</SelectItem>
-                      <SelectItem value="eléctrica">Eléctrica</SelectItem>
-                      <SelectItem value="char-broiler">Char-broiler</SelectItem>
-                      <SelectItem value="plancha">Plancha</SelectItem>
-                      <SelectItem value="mixta">Mixta</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Longitud L (m)</Label>
-                  <Input type="number" step="0.01" value={data.L}
-                    onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Fondo F (m)</Label>
-                  <Input type="number" step="0.01" value={data.F}
-                    onChange={(e) => onChange("F", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Altura instalación (m)</Label>
-                  <Input type="number" step="0.01" value={data.alturaInstalacion}
-                    onChange={(e) => onChange("alturaInstalacion", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Potencia térmica (kW, opcional)</Label>
-                  <Input type="number" step="1" value={data.potenciaTermica ?? ""}
-                    onChange={(e) => onChange("potenciaTermica", e.target.value ? parseFloat(e.target.value) : undefined)} />
-                </div>
-                <div>
-                  <Label>Velocidad de captura Vap (m/s)</Label>
-                  <Input type="number" step="0.01" value={data.velocidadCaptura}
-                    onChange={(e) => onChange("velocidadCaptura", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Caudal de diseño (m³/h, opcional)</Label>
-                  <Input type="number" step="1" value={data.caudalDiseno ?? ""}
-                    onChange={(e) => onChange("caudalDiseno", e.target.value ? parseFloat(e.target.value) : undefined)} />
-                </div>
-              </div>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4">
+                  <TabsTrigger value="campana">Campana</TabsTrigger>
+                  <TabsTrigger value="conducto">Conductos</TabsTrigger>
+                  <TabsTrigger value="filtros">Filtros</TabsTrigger>
+                  <TabsTrigger value="salida">Aporte/Salida</TabsTrigger>
+                </TabsList>
 
-              <Separator />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Tipo de conducto</Label>
-                  <Select value={data.tipoConducto} onValueChange={(v) => onChange("tipoConducto", v as any)}>
-                    <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="circular">Circular</SelectItem>
-                      <SelectItem value="rectangular">Rectangular</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Velocidad en conducto Vd (m/s)</Label>
-                  <Input type="number" step="0.1" value={data.velocidadDucto}
-                    onChange={(e) => onChange("velocidadDucto", parseFloat(e.target.value) || 0)} />
-                </div>
-                {data.tipoConducto === "rectangular" && (
-                  <>
-                    <div>
-                      <Label>Ancho rect (m)</Label>
-                      <Input type="number" step="0.01" value={data.anchoRect ?? ""}
-                        onChange={(e) => onChange("anchoRect", e.target.value ? parseFloat(e.target.value) : undefined)} />
-                    </div>
-                    <div>
-                      <Label>Alto rect (m)</Label>
-                      <Input type="number" step="0.01" value={data.altoRect ?? ""}
-                        onChange={(e) => onChange("altoRect", e.target.value ? parseFloat(e.target.value) : undefined)} />
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Longitud total de conducto (m)</Label>
-                  <Input type="number" step="0.1" value={data.longitudConducto}
-                    onChange={(e) => onChange("longitudConducto", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Fricción (Pa/m)</Label>
-                  <Input type="number" step="0.1" value={data.friccionPaPorM}
-                    onChange={(e) => onChange("friccionPaPorM", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Pérdida en filtros (Pa)</Label>
-                  <Input type="number" step="1" value={data.perdidaFiltrosPa}
-                    onChange={(e) => onChange("perdidaFiltrosPa", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label>Pérdida salida/terminal (Pa)</Label>
-                  <Input type="number" step="1" value={data.perdidaSalidaPa}
-                    onChange={(e) => onChange("perdidaSalidaPa", parseFloat(e.target.value) || 0)} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div>
-                  <Label>Codos 90°</Label>
-                  <Input type="number" value={data.accesorios.codo90}
-                    onChange={(e) => onAccessoryChange("codo90", parseInt(e.target.value || "0"))} />
-                </div>
-                <div>
-                  <Label>Codos 45°</Label>
-                  <Input type="number" value={data.accesorios.codo45}
-                    onChange={(e) => onAccessoryChange("codo45", parseInt(e.target.value || "0"))} />
-                </div>
-                <div>
-                  <Label>Transiciones</Label>
-                  <Input type="number" value={data.accesorios.transiciones}
-                    onChange={(e) => onAccessoryChange("transiciones", parseInt(e.target.value || "0"))} />
-                </div>
-                <div>
-                  <Label>Rejillas</Label>
-                  <Input type="number" value={data.accesorios.rejillas}
-                    onChange={(e) => onAccessoryChange("rejillas", parseInt(e.target.value || "0"))} />
-                </div>
-                <div>
-                  <Label>Compuertas</Label>
-                  <Input type="number" value={data.accesorios.compuertas}
-                    onChange={(e) => onAccessoryChange("compuertas", parseInt(e.target.value || "0"))} />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Filtro electrostático</Label>
-                  <Switch checked={filtroOn} onCheckedChange={setFiltroOn} />
-                </div>
-
-                {filtroOn && (
+                <TabsContent value="campana" className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Modelo</Label>
-                      <Select value={modeloFiltro ?? ""} onValueChange={(v) => setModeloFiltro(v)}>
-                        <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
+                      <Label>Tipo de campana</Label>
+                      <Select value={data.tipoCampana} onValueChange={(v) => onChange("tipoCampana", v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                         <SelectContent>
-                          {ELECTRO_FILTERS.map((f) => (
-                            <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
-                          ))}
+                          <SelectItem value="mural">Mural (pared)</SelectItem>
+                          <SelectItem value="central">Central (isla)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <Label>Δp filtro limpio (Pa)</Label>
-                      <Input
-                        type="number"
-                        placeholder={selectedFiltro?.dpFiltroLimpioPa !== undefined ? String(selectedFiltro.dpFiltroLimpioPa) : "Introduce valor"}
-                        value={dpFiltroLimpio ?? (selectedFiltro?.dpFiltroLimpioPa ?? "")}
-                        onChange={(e) =>
-                          setDpFiltroLimpio(e.target.value ? parseFloat(e.target.value) : undefined)
-                        }
-                      />
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Puedes ajustar para estado sucio (+50%).
-                      </div>
+                      <Label>Tipo de cocina/combustible</Label>
+                      <Select value={data.tipoCocina} onValueChange={(v) => onChange("tipoCocina", v)}>
+                        <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="gas">Gas</SelectItem>
+                          <SelectItem value="eléctrica">Eléctrica</SelectItem>
+                          <SelectItem value="char-broiler">Char-broiler</SelectItem>
+                          <SelectItem value="plancha">Plancha</SelectItem>
+                          <SelectItem value="mixta">Mixta</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-
-                    <div className="flex items-center gap-2 pt-2">
-                      <Switch checked={estadoSucio} onCheckedChange={setEstadoSucio} />
-                      <Label>Estado sucio (+50%)</Label>
+                    <div>
+                      <Label>Longitud L (m)</Label>
+                      <Input type="number" step="0.01" value={data.L}
+                        onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
+                      {validation.fieldErrors.L && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.L}</p>}
                     </div>
+                    <div>
+                      <Label>Fondo F (m)</Label>
+                      <Input type="number" step="0.01" value={data.F}
+                        onChange={(e) => onChange("F", parseFloat(e.target.value) || 0)} />
+                      {validation.fieldErrors.F && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.F}</p>}
+                    </div>
+                    <div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-between">
+                              <Label>Altura instalación (m)</Label>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>{helperText.alturaGas}</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <Input type="number" step="0.01" value={data.alturaInstalacion}
+                        onChange={(e) => onChange("alturaInstalacion", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label>Potencia térmica (kW, opcional)</Label>
+                      <Input type="number" step="1" value={data.potenciaTermica ?? ""}
+                        onChange={(e) => onChange("potenciaTermica", e.target.value ? parseFloat(e.target.value) : undefined)} />
+                    </div>
+                    <div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-between">
+                              <Label>Velocidad de captura Vap (m/s)</Label>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>{helperText.vap}</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <Input type="number" step="0.01" placeholder="0,30 recomendado" value={data.velocidadCaptura}
+                        onChange={(e) => onChange("velocidadCaptura", parseFloat(e.target.value) || 0)} />
+                      {validation.fieldErrors.velocidadCaptura && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.velocidadCaptura}</p>}
+                    </div>
+                    <div>
+                      <Label>Caudal de diseño (m³/h, opcional)</Label>
+                      <Input type="number" step="1" value={data.caudalDiseno ?? ""}
+                        onChange={(e) => onChange("caudalDiseno", e.target.value ? parseFloat(e.target.value) : undefined)} />
+                    </div>
+                  </div>
+                </TabsContent>
 
-                    {selectedFiltro && (
-                      <div className="sm:col-span-2">
-                        <div className="rounded-md border p-3 text-sm">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div>
-                              <div className="text-xs text-muted-foreground">Caudal máx.</div>
-                              <div className="font-medium">{formato(selectedFiltro.caudalMax,0)} m³/h</div>
+                <TabsContent value="conducto" className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Tipo de conducto</Label>
+                      <Select value={data.tipoConducto} onValueChange={(v) => onChange("tipoConducto", v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="circular">Circular</SelectItem>
+                          <SelectItem value="rectangular">Rectangular</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-between">
+                              <Label>Velocidad en conducto Vd (m/s)</Label>
                             </div>
-                            <div>
-                              <div className="text-xs text-muted-foreground">Δp carbón</div>
-                              <div className="font-medium">{selectedFiltro.dpCarbonPa} Pa</div>
-                            </div>
-                            <div>
-                              <div className="text-xs text-muted-foreground">Δp total filtro</div>
-                              <div className="font-medium">{formato(filtroDpTotal ?? 0,0)} Pa</div>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-                            <div>
-                              <div className="text-xs text-muted-foreground">Ventilador recomendado</div>
-                              <div className="font-medium">{selectedFiltro.ventilador} ({selectedFiltro.potenciaKw} kW)</div>
-                            </div>
-                            <div>
-                              <div className="text-xs text-muted-foreground">Dimensiones A×B×C</div>
-                              <div className="font-medium">{selectedFiltro.dimensiones}</div>
-                            </div>
-                            <div>
-                              <div className="text-xs text-muted-foreground">Tolvas Ø asp/imp</div>
-                              <div className="font-medium">{selectedFiltro.tolvaAspMm} / {selectedFiltro.tolvaImpMm} mm</div>
-                            </div>
-                          </div>
-                          {filtroClamped && (
-                            <div className="mt-3 text-xs text-amber-600">
-                              Caudal limitado al máximo del filtro seleccionado.
-                            </div>
-                          )}
+                          </TooltipTrigger>
+                          <TooltipContent><p>{helperText.vd}</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <Input type="number" step="0.1" placeholder="8–12 recomendado" value={data.velocidadDucto}
+                        onChange={(e) => onChange("velocidadDucto", parseFloat(e.target.value) || 0)} />
+                      {validation.fieldErrors.velocidadDucto && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.velocidadDucto}</p>}
+                    </div>
+                    {data.tipoConducto === "rectangular" && (
+                      <>
+                        <div>
+                          <Label>Ancho rect (m)</Label>
+                          <Input type="number" step="0.01" value={data.anchoRect ?? ""}
+                            onChange={(e) => onChange("anchoRect", e.target.value ? parseFloat(e.target.value) : undefined)} />
+                          {validation.fieldErrors.anchoRect && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.anchoRect as string}</p>}
                         </div>
+                        <div>
+                          <Label>Alto rect (m)</Label>
+                          <Input type="number" step="0.01" value={data.altoRect ?? ""}
+                            onChange={(e) => onChange("altoRect", e.target.value ? parseFloat(e.target.value) : undefined)} />
+                          {validation.fieldErrors.altoRect && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.altoRect as string}</p>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Longitud total de conducto (m)</Label>
+                      <Input type="number" step="0.1" value={data.longitudConducto}
+                        onChange={(e) => onChange("longitudConducto", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-between">
+                              <Label>Fricción (Pa/m)</Label>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>{helperText.friccion}</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <Input type="number" step="0.1" value={data.friccionPaPorM}
+                        onChange={(e) => onChange("friccionPaPorM", parseFloat(e.target.value) || 0)} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Codos 90°</Label>
+                      <Input type="number" value={data.accesorios.codo90}
+                        onChange={(e) => onAccessoryChange("codo90", parseInt(e.target.value || "0"))} />
+                    </div>
+                    <div>
+                      <Label>Codos 45°</Label>
+                      <Input type="number" value={data.accesorios.codo45}
+                        onChange={(e) => onAccessoryChange("codo45", parseInt(e.target.value || "0"))} />
+                    </div>
+                    <div>
+                      <Label>Transiciones</Label>
+                      <Input type="number" value={data.accesorios.transiciones}
+                        onChange={(e) => onAccessoryChange("transiciones", parseInt(e.target.value || "0"))} />
+                    </div>
+                    <div>
+                      <Label>Rejillas</Label>
+                      <Input type="number" value={data.accesorios.rejillas}
+                        onChange={(e) => onAccessoryChange("rejillas", parseInt(e.target.value || "0"))} />
+                    </div>
+                    <div>
+                      <Label>Compuertas</Label>
+                      <Input type="number" value={data.accesorios.compuertas}
+                        onChange={(e) => onAccessoryChange("compuertas", parseInt(e.target.value || "0"))} />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="filtros" className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label>Filtro electrostático</Label>
+                      <Switch checked={filtroOn} onCheckedChange={setFiltroOn} />
+                    </div>
+
+                    {filtroOn && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Modelo</Label>
+                          <Select value={modeloFiltro ?? ""} onValueChange={(v) => setModeloFiltro(v)}>
+                            <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
+                            <SelectContent>
+                              {ELECTRO_FILTERS.map((f) => (
+                                <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Δp filtro limpio (Pa)</Label>
+                          <Input
+                            type="number"
+                            placeholder={selectedFiltro?.dpFiltroLimpioPa !== undefined ? String(selectedFiltro.dpFiltroLimpioPa) : "Introduce valor"}
+                            value={dpFiltroLimpio ?? (selectedFiltro?.dpFiltroLimpioPa ?? "")}
+                            onChange={(e) =>
+                              setDpFiltroLimpio(e.target.value ? parseFloat(e.target.value) : undefined)
+                            }
+                          />
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Puedes ajustar para estado sucio (+50%).
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                          <Switch checked={estadoSucio} onCheckedChange={setEstadoSucio} />
+                          <Label>Estado sucio (+50%)</Label>
+                        </div>
+
+                        {selectedFiltro && (
+                          <div className="sm:col-span-2">
+                            <div className="rounded-md border p-3 text-sm">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Caudal máx.</div>
+                                  <div className="font-medium">{formato(selectedFiltro.caudalMax,0)} m³/h</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Δp carbón</div>
+                                  <div className="font-medium">{selectedFiltro.dpCarbonPa} Pa</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Tolvas Ø asp/imp</div>
+                                  <div className="font-medium">{selectedFiltro.tolvaAspMm} / {selectedFiltro.tolvaImpMm} mm</div>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Ventilador recomendado</div>
+                                  <div className="font-medium">{selectedFiltro.ventilador} ({selectedFiltro.potenciaKw} kW)</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Dimensiones A×B×C</div>
+                                  <div className="font-medium">{selectedFiltro.dimensiones}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Δp total filtro</div>
+                                  <div className="font-medium">{formato(filtroDpTotal ?? 0,0)} Pa</div>
+                                </div>
+                              </div>
+                              {filtroClamped && (
+                                <div className="mt-3 text-xs text-amber-600">
+                                  Caudal limitado al máximo del filtro seleccionado.
+                                </div>
+                              )}
+                              {validation.formErrors.length > 0 && (
+                                <ul className="mt-2 list-disc pl-5 text-xs text-red-600 space-y-1">
+                                  {validation.formErrors.map((e, i) => <li key={i}>{e}</li>)}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
+                </TabsContent>
 
-              <Separator />
+                <TabsContent value="salida" className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Lugar de expulsión</Label>
+                      <Select value={data.lugarExpulsion} onValueChange={(v) => onChange("lugarExpulsion", v)}>
+                        <SelectTrigger><SelectValue placeholder="Lugar" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tejado">Tejado</SelectItem>
+                          <SelectItem value="fachada">Fachada</SelectItem>
+                          <SelectItem value="ventilación forzada">Ventilación forzada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Ruido máx. dB(A) (opcional)</Label>
+                      <Input type="number" value={data.nivelRuidoMax ?? ""}
+                        onChange={(e) => onChange("nivelRuidoMax", e.target.value ? parseFloat(e.target.value) : undefined)} />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-6">
+                      <Label>Supresión de incendios</Label>
+                      <Switch checked={data.supresionIncendios} onCheckedChange={(v) => onChange("supresionIncendios", v)} />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <Label>Lugar de expulsión</Label>
-                  <Select value={data.lugarExpulsion} onValueChange={(v) => onChange("lugarExpulsion", v)}>
-                    <SelectTrigger><SelectValue placeholder="Lugar" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tejado">Tejado</SelectItem>
-                      <SelectItem value="fachada">Fachada</SelectItem>
-                      <SelectItem value="ventilación forzada">Ventilación forzada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Ruido máx. dB(A) (opcional)</Label>
-                  <Input type="number" value={data.nivelRuidoMax ?? ""}
-                    onChange={(e) => onChange("nivelRuidoMax", e.target.value ? parseFloat(e.target.value) : undefined)} />
-                </div>
-                <div className="flex items-center justify-between gap-2 pt-6">
-                  <Label>Supresión de incendios</Label>
-                  <Switch checked={data.supresionIncendios} onCheckedChange={(v) => onChange("supresionIncendios", v)} />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Pérdida en filtros (Pa)</Label>
+                      <Input type="number" step="1" value={data.perdidaFiltrosPa}
+                        onChange={(e) => onChange("perdidaFiltrosPa", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label>Pérdida salida/terminal (Pa)</Label>
+                      <Input type="number" step="1" value={data.perdidaSalidaPa}
+                        onChange={(e) => onChange("perdidaSalidaPa", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label>Margen de caudal (%)</Label>
+                      <Input type="number" value={data.margenCaudalPct}
+                        onChange={(e) => onChange("margenCaudalPct", parseFloat(e.target.value) || 0)} />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Margen de caudal (%)</Label>
-                  <Input type="number" value={data.margenCaudalPct}
-                    onChange={(e) => onChange("margenCaudalPct", parseFloat(e.target.value) || 0)} />
-                </div>
-              </div>
+                  <Separator />
 
-              <div className="flex gap-3 pt-2">
-                <Button variant="hero" className="hover-lift" onClick={exportPDF}>Exportar PDF</Button>
-                <Button variant="secondary" className="hover-lift" onClick={exportCSV}>Exportar CSV</Button>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Aporte de aire (%)</Label>
+                      <Input type="number" step="1" value={aportePct}
+                        onChange={(e) => setAportePct(parseFloat(e.target.value) || 0)} />
+                      <div className="mt-1 text-xs text-muted-foreground">Proporción del caudal extraído a reponer (p.ej. 80–90%).</div>
+                    </div>
+                    <div className="sm:col-span-2 flex items-end">
+                      <div className="rounded-md border p-3 w-full">
+                        <div className="text-xs text-muted-foreground">Caudal de aporte</div>
+                        <div className="font-semibold">{formato((aportePct / 100) * results.Q, 0)} m³/h</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <Button variant="hero" className="hover-lift" onClick={exportPDF}>Exportar PDF</Button>
+                    <Button variant="secondary" className="hover-lift" onClick={exportCSV}>Exportar CSV</Button>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 
@@ -490,16 +599,34 @@ const Index = () => {
                 <Separator />
 
                 <div>
+                  <h3 className="text-base font-medium mb-1">Desglose de pérdidas</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <StatSmall label="Conducto recto" value={`${formato(dpRecto,0)} Pa`} />
+                    <StatSmall label="Accesorios (equiv.)" value={`${formato(dpAcc,0)} Pa`} />
+                    <StatSmall label="Filtros + carbón" value={`${formato(dpFiltros,0)} Pa`} />
+                    <StatSmall label="Salida/terminal" value={`${formato(dpSalida,0)} Pa`} />
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
                   <h3 className="text-base font-medium mb-1">Selección de ventilador</h3>
                   <p className="text-sm text-muted-foreground">{results.recomendacionVentilador}</p>
                 </div>
 
-                {(results.avisos.length > 0 || filtroClamped) && (
+                {(results.avisos.length > 0 || validation.warnings.length > 0 || validation.formErrors.length > 0 || filtroClamped) && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Avisos</h3>
                     <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
                       {results.avisos.map((a, i) => (
                         <li key={i}>{a}</li>
+                      ))}
+                      {validation.warnings.map((a, i) => (
+                        <li key={`w-${i}`}>{a}</li>
+                      ))}
+                      {validation.formErrors.map((a, i) => (
+                        <li key={`e-${i}`} className="text-red-600">{a}</li>
                       ))}
                       {filtroClamped && (
                         <li>Caudal limitado al máximo del filtro seleccionado.</li>
@@ -529,6 +656,13 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-md border p-4">
     <div className="text-xs text-muted-foreground">{label}</div>
     <div className="text-lg font-semibold">{value}</div>
+  </div>
+);
+
+const StatSmall = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-md border p-3">
+    <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="text-sm font-semibold">{value}</div>
   </div>
 );
 
