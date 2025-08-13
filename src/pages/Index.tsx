@@ -18,6 +18,7 @@ import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
 import { TEVEX_HOODS, TEVEX_FANS } from "@/data/tevex";
 import { TEVEX_CAJAS } from "@/data/tevex";
+import { TEVEX_CURVES } from "@/data/tevexCurves";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
 import { FanCurveChart } from "@/components/FanCurveChart";
@@ -167,9 +168,13 @@ const Index = () => {
       ? FANS.find(f => f.modelo === results.fanModeloSugerido)
       : (selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined);
     if (found) return found;
-    // Fallback: generar curva sintética para TEVEX si hay selección de motor o caja
+    // Si hay selección TEVEX y existe curva real, usarla
     const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
+    if (sourceName && TEVEX_CURVES[sourceName]) {
+      return { modelo: sourceName, curva: TEVEX_CURVES[sourceName] };
+    }
     if (!sourceName) return undefined;
+    // Fallback: generar curva sintética para TEVEX si hay selección de motor o caja
     const gen = (() => {
       const m = sourceName.toUpperCase();
       const series = m.startsWith("TMI 400") || m.includes("TMI 400") ? "TMI400"
