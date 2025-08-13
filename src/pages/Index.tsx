@@ -740,7 +740,7 @@ const Index = () => {
                       </div>
                       <div>
                         <Label>Motor TEVEX (opcional)</Label>
-                        <Select value={tevexMotorSel ?? ""} onValueChange={(m) => setTevexMotorSel(m)}>
+                        <Select value={tevexMotorSel ?? ""} onValueChange={(m) => { setTevexMotorSel(m); setTevexCajaSel(""); }} >
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona motor" />
                           </SelectTrigger>
@@ -760,7 +760,7 @@ const Index = () => {
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
-                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => setTevexCajaSel(m)}>
+                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(""); }} >
                           <SelectTrigger><SelectValue placeholder="Selecciona caja" /></SelectTrigger>
                           <SelectContent>
                             {TEVEX_CAJAS.map(c => (
