@@ -1184,4 +1184,105 @@ const Index = () => {
                       <LineChart data={interpCurve} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={(v) => `${v}`} />
-                        <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`
+                        <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`} />
+                        {/* Gridlines at ticks */}
+                        {qTicks?.map((x) => (
+                          <ReferenceLine key={`vx-${x}`} x={x} stroke="currentColor" strokeOpacity={0.1} />
+                        ))}
+                        {dpTicks?.map((y) => (
+                          <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.1} />
+                        ))}
+                        <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModel?.modelo ?? ""}`} stroke="hsl(var(--primary))" dot={false} />
+                        {compararFan && interpCurveExtra.length > 0 && (
+                          <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModelExtra?.modelo ?? ""}`} data={interpCurveExtra} stroke="hsl(var(--secondary))" dot={false} />
+                        )}
+                        {/* Crosshair at operation point */}
+                        <ReferenceLine x={Math.round(results.Q)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                        <ReferenceLine y={Math.round(results.deltaPtotal)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                        <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" label={{ position: 'top', value: `Q=${Math.round(results.Q)} Δp=${Math.round(results.deltaPtotal)}` }} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartLegend content={<ChartLegendContent />} />
+                      </LineChart>
+                    </ChartContainer>
+                    <p className="text-xs text-muted-foreground mt-1">Punto operación: Q={formato(results.Q,0)} m³/h, Δp={formato(results.deltaPtotal,0)} Pa</p>
+                    {qTicks && dpTicks && (
+                      <div className="text-[10px] text-muted-foreground mt-1">
+                        <div>Horiz (Q m³/h): {qTicks.join(" · ")}</div>
+                        <div>Vert (Δp Pa): {dpTicks.join(" · ")}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-base font-medium mb-1">Desglose de pérdidas</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <StatSmall label="Conducto recto" value={`${formato(dpRecto,0)} Pa`} />
+                    <StatSmall label="Accesorios (equiv.)" value={`${formato(dpAcc,0)} Pa`} />
+                    <StatSmall label="Filtros + carbón" value={`${formato(dpFiltros,0)} Pa`} />
+                    <StatSmall label="Salida/terminal" value={`${formato(dpSalida,0)} Pa`} />
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h3 className="text-base font-medium mb-1">Selección de ventilador</h3>
+                  <p className="text-sm text-muted-foreground">{results.recomendacionVentilador}</p>
+                  {results.fanModeloSugerido && (
+                    <p className="text-xs text-muted-foreground">Modelo sugerido por curva: {results.fanModeloSugerido}</p>
+                  )}
+                </div>
+
+                {(results.avisos.length > 0 || validation.warnings.length > 0 || validation.formErrors.length > 0 || filtroClamped) && (
+                  <div>
+                    <h3 className="text-base font-medium mb-1">Avisos</h3>
+                    <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                      {results.avisos.map((a, i) => (
+                        <li key={i}>{a}</li>
+                      ))}
+                      {validation.warnings.map((a, i) => (
+                        <li key={`w-${i}`}>{a}</li>
+                      ))}
+                      {validation.formErrors.map((a, i) => (
+                        <li key={`e-${i}`} className="text-red-600">{a}</li>
+                      ))}
+                      {filtroClamped && (
+                        <li>Caudal limitado al máximo del filtro seleccionado.</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                <Separator />
+
+                <div className="text-sm text-muted-foreground">
+                  <p>
+                    Notas: Valores de partida (Vap, Vd, fricción) ajustables. Verifica con normativa y
+                    fabricante. Mantén filtros limpios y realiza mantenimiento periódico.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </main>
+    </>
+  );
+};
+
+const Stat = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-md border p-4">
+    <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="text-lg font-semibold">{value}</div>
+  </div>
+);
+
+const StatSmall = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-md border p-3">
+    <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="text-sm font-semibold">{value}</div>
+  </div>
+);
+
+export default Index;
