@@ -91,6 +91,27 @@ const Index = () => {
   const [compararFan, setCompararFan] = useState(false);
   const [fanModeloExtra, setFanModeloExtra] = useState<string | undefined>(undefined);
 
+  // Persistencia en localStorage
+  const STORAGE_KEY = "hood_calc_prefs_v1";
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (typeof saved?.margenPct === 'number') setMargenPct(saved.margenPct);
+      if (saved?.precios && typeof saved.precios === 'object') setPrecios((p) => ({ ...p, ...saved.precios }));
+      if (typeof saved?.compararFan === 'boolean') setCompararFan(saved.compararFan);
+      if (typeof saved?.fanModeloExtra === 'string') setFanModeloExtra(saved.fanModeloExtra);
+      if (saved?.tipoInforme === 'cliente' || saved?.tipoInforme === 'tecnico') setTipoInforme(saved.tipoInforme);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      const toSave = { precios, margenPct, compararFan, fanModeloExtra, tipoInforme };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {}
+  }, [precios, margenPct, compararFan, fanModeloExtra, tipoInforme]);
+
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
     setData((d) => ({
