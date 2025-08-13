@@ -140,9 +140,10 @@ const Index = () => {
     const isMonoblock = /Monoblock/i.test(tevexHoodSel);
     const isMonoblock400 = /400º\/?2H/i.test(tevexHoodSel);
     if (!isMonoblock) return;
-    import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblock }) => {
-      const motor = selectMotorForMonoblock(tevexHoodSel, data.L, data.F, isMonoblock400);
-      if (motor) setTevexMotorSel(motor);
+    import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
+      selectMotorForMonoblockExcelAware(tevexHoodSel, data.L, data.F, isMonoblock400).then(motor => {
+        if (motor) setTevexMotorSel(motor);
+      });
     });
   }, [tevexHoodSel, data.L, data.F]);
 
@@ -754,9 +755,10 @@ const Index = () => {
                           const isMonoblock = /Monoblock/i.test(m);
                           const isMonoblock400 = /400º\/?2H/i.test(m);
                           if (isMonoblock) {
-                            import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblock }) => {
-                              const motor = selectMotorForMonoblock(m, hood.LdefaultM, hood.FdefaultM, isMonoblock400);
-                              if (motor) setTevexMotorSel(motor);
+                            import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
+                              selectMotorForMonoblockExcelAware(m, hood.LdefaultM, hood.FdefaultM, isMonoblock400).then(motor => {
+                                if (motor) setTevexMotorSel(motor);
+                              });
                             });
                           } else if (hood.motorIncluidoModelo) {
                             setTevexMotorSel(hood.motorIncluidoModelo);

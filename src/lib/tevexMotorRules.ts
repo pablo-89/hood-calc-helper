@@ -1,3 +1,37 @@
+import { loadTevexExcelMapping } from "@/lib/tevexExcel";
+
+let cachedExcel: Promise<import("@/lib/tevexExcel").TevexExcelMapping | undefined> | undefined;
+async function getExcel() {
+  if (!cachedExcel) cachedExcel = loadTevexExcelMapping();
+  return cachedExcel;
+}
+
+export async function selectMotorForMonoblockExcelAware(hoodModel: string, lengthMeters: number, depthMeters: number, isHomologada400?: boolean): Promise<string | undefined> {
+  const mapping = await getExcel();
+  if (mapping) {
+    const key = hoodModel.trim().toUpperCase();
+    const Lmm = Math.round(lengthMeters * 1000);
+    const Fmm = Math.round(depthMeters * 1000);
+    const entries = mapping.models[key];
+    if (entries && entries.length > 0) {
+      // elegir por fondo más cercano y primer tramo con maxLargo >= L
+      const byFondo = entries
+        .map(e => ({ e, df: isFinite(e.fondoMm) ? Math.abs(e.fondoMm - Fmm) : 0 }))
+        .sort((a, b) => a.df - b.df)
+        .map(x => x.e);
+      for (const e of byFondo) {
+        if (isFinite(e.maxLargoMm)) {
+          if (Lmm <= e.maxLargoMm) return e.motor;
+        }
+      }
+      // si no hay tramos con maxLargo, devolver el último motor declarado
+      return byFondo[byFondo.length - 1]?.motor;
+    }
+  }
+  // fallback a reglas estáticas
+  return selectMotorForMonoblock(hoodModel, lengthMeters, depthMeters, isHomologada400);
+}
+
 // Selector de motor TEVEX para campanas Monoblock según largo (L) y fondo (F)
 // Basado en tablas "LARGO - VENTILADOR" del catálogo (Óptima/Premium/Low, mural/central)
 // Nota: Para longitudes que requieren doble ventilador (>= 3200 en central), devolvemos undefined
