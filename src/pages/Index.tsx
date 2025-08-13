@@ -88,6 +88,8 @@ const Index = () => {
     terminal: 95,
     ventilador: defaultFanPrices(),
   });
+  const [compararFan, setCompararFan] = useState(false);
+  const [fanModeloExtra, setFanModeloExtra] = useState<string | undefined>(undefined);
 
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
@@ -132,6 +134,11 @@ const Index = () => {
     return undefined;
   }, [results.fanModeloSugerido, selectedFiltro]);
 
+  const fanChartModelExtra = useMemo(() => {
+    if (!compararFan || !fanModeloExtra) return undefined;
+    return FANS.find(f => f.modelo === fanModeloExtra);
+  }, [compararFan, fanModeloExtra]);
+
   const generateTicks = (min: number, max: number, count = 5) => {
     if (max <= min) return [min, max];
     const step = (max - min) / (count - 1);
@@ -141,20 +148,26 @@ const Index = () => {
   };
 
   const qTicks = useMemo(() => {
-    const qs = fanChartModel?.curva.map(p => p.Q) ?? [];
+    const qs = [
+      ...(fanChartModel?.curva.map(p => p.Q) ?? []),
+      ...(fanChartModelExtra?.curva.map(p => p.Q) ?? []),
+    ];
     if (qs.length === 0) return undefined;
     const min = Math.min(...qs, Math.round(results.Q));
     const max = Math.max(...qs, Math.round(results.Q));
     return generateTicks(min, max, 5);
-  }, [fanChartModel, results.Q]);
+  }, [fanChartModel, fanChartModelExtra, results.Q]);
 
   const dpTicks = useMemo(() => {
-    const dps = fanChartModel?.curva.map(p => p.dp) ?? [];
+    const dps = [
+      ...(fanChartModel?.curva.map(p => p.dp) ?? []),
+      ...(fanChartModelExtra?.curva.map(p => p.dp) ?? []),
+    ];
     if (dps.length === 0) return undefined;
     const min = 0;
     const max = Math.max(...dps, Math.round(results.deltaPtotal));
     return generateTicks(min, max, 5);
-  }, [fanChartModel, results.deltaPtotal]);
+  }, [fanChartModel, fanChartModelExtra, results.deltaPtotal]);
 
   const interpCurve = useMemo(() => {
     const c = fanChartModel?.curva;
@@ -171,6 +184,22 @@ const Index = () => {
     }
     return out;
   }, [fanChartModel]);
+
+  const interpCurveExtra = useMemo(() => {
+    const c = fanChartModelExtra?.curva;
+    if (!c || c.length < 2) return [] as { q: number; dp: number }[];
+    const out: { q: number; dp: number }[] = [];
+    const stepsPerSeg = 10;
+    for (let i = 0; i < c.length - 1; i++) {
+      const a = c[i];
+      const b = c[i + 1];
+      for (let s = 0; s <= stepsPerSeg; s++) {
+        const t = s / stepsPerSeg;
+        out.push({ q: Math.round(a.Q + (b.Q - a.Q) * t), dp: Math.round(a.dp + (b.dp - a.dp) * t) });
+      }
+    }
+    return out;
+  }, [fanChartModelExtra]);
 
   const onChange = (field: keyof InputData, value: any) => {
     setData((d) => ({ ...d, [field]: value }));
@@ -1046,6 +1075,24 @@ const Index = () => {
                 {fanChartModel && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={compararFan} onCheckedChange={setCompararFan} />
+                        <span className="text-sm">Comparar con otro modelo</span>
+                      </div>
+                      {compararFan && (
+                        <div>
+                          <Select value={fanModeloExtra ?? ""} onValueChange={setFanModeloExtra}>
+                            <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
+                            <SelectContent>
+                              {FANS.map(f => (
+                                <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
                     <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
                       <LineChart data={interpCurve} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -1059,6 +1106,9 @@ const Index = () => {
                           <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.1} />
                         ))}
                         <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModel?.modelo ?? ""}`} stroke="hsl(var(--primary))" dot={false} />
+                        {compararFan && interpCurveExtra.length > 0 && (
+                          <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModelExtra?.modelo ?? ""}`} data={interpCurveExtra} stroke="hsl(var(--secondary))" dot={false} />
+                        )}
                         {/* Crosshair at operation point */}
                         <ReferenceLine x={Math.round(results.Q)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
                         <ReferenceLine y={Math.round(results.deltaPtotal)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
