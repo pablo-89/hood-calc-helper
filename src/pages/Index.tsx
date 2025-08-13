@@ -17,7 +17,7 @@ import { validateInput } from "@/lib/validation";
 import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts";
+import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
@@ -155,6 +155,22 @@ const Index = () => {
     const max = Math.max(...dps, Math.round(results.deltaPtotal));
     return generateTicks(min, max, 5);
   }, [fanChartModel, results.deltaPtotal]);
+
+  const interpCurve = useMemo(() => {
+    const c = fanChartModel?.curva;
+    if (!c || c.length < 2) return [] as { q: number; dp: number }[];
+    const out: { q: number; dp: number }[] = [];
+    const stepsPerSeg = 10;
+    for (let i = 0; i < c.length - 1; i++) {
+      const a = c[i];
+      const b = c[i + 1];
+      for (let s = 0; s <= stepsPerSeg; s++) {
+        const t = s / stepsPerSeg;
+        out.push({ q: Math.round(a.Q + (b.Q - a.Q) * t), dp: Math.round(a.dp + (b.dp - a.dp) * t) });
+      }
+    }
+    return out;
+  }, [fanChartModel]);
 
   const onChange = (field: keyof InputData, value: any) => {
     setData((d) => ({ ...d, [field]: value }));
@@ -384,17 +400,44 @@ const Index = () => {
           doc.line(gx - 2, ytick, gx, ytick);
           doc.text(String(v), gx - 4, ytick + 2, { align: 'right' });
         });
-        // Curva
+        // gridlines at ticks
+        doc.setDrawColor(220);
+        qTicksPdf.forEach(v => {
+          const x = sx(v);
+          doc.line(x, gy, x, gy + gh);
+        });
+        dpTicksPdf.forEach(v => {
+          const yline = sy(v);
+          doc.line(gx, yline, gx + gw, yline);
+        });
+        // Curva (interpolada)
         doc.setDrawColor(0);
+        const stepsPerSeg = 10;
         for (let i = 0; i < fanModel.curva.length - 1; i++) {
           const a = fanModel.curva[i];
           const b = fanModel.curva[i + 1];
-          doc.line(sx(a.Q), sy(a.dp), sx(b.Q), sy(b.dp));
+          let prevX = sx(a.Q);
+          let prevY = sy(a.dp);
+          for (let s = 1; s <= stepsPerSeg; s++) {
+            const t = s / stepsPerSeg;
+            const q = a.Q + (b.Q - a.Q) * t;
+            const dp = a.dp + (b.dp - a.dp) * t;
+            const nx = sx(q);
+            const ny = sy(dp);
+            doc.line(prevX, prevY, nx, ny);
+            prevX = nx;
+            prevY = ny;
+          }
         }
-        // Punto de operación
+        // Punto de operación + crosshair
         const px = sx(Math.round(results.Q));
         const py = sy(Math.round(results.deltaPtotal));
         doc.setFillColor(200, 0, 0);
+        // crosshair dashed
+        ;(doc as any).setLineDash?.([2, 2], 0);
+        doc.line(px, gy, px, gy + gh);
+        doc.line(gx, py, gx + gw, py);
+        ;(doc as any).setLineDash?.([], 0);
         doc.circle(px, py, 1.8, 'F');
         // Etiquetas
         doc.setFontSize(9);
@@ -1001,11 +1044,21 @@ const Index = () => {
                   <div>
                     <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
                     <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
-                      <LineChart data={fanChartModel.curva.map(p => ({ q: p.Q, dp: p.dp }))} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
+                      <LineChart data={interpCurve} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={(v) => `${v}`} />
                         <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`} />
+                        {/* Gridlines at ticks */}
+                        {qTicks?.map((x) => (
+                          <ReferenceLine key={`vx-${x}`} x={x} stroke="currentColor" strokeOpacity={0.1} />
+                        ))}
+                        {dpTicks?.map((y) => (
+                          <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.1} />
+                        ))}
                         <Line type="monotone" dataKey="dp" stroke="hsl(var(--primary))" dot={false} />
+                        {/* Crosshair at operation point */}
+                        <ReferenceLine x={Math.round(results.Q)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                        <ReferenceLine y={Math.round(results.deltaPtotal)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
                         <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <ChartLegend content={<ChartLegendContent />} />
