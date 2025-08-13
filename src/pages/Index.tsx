@@ -96,6 +96,9 @@ const Index = () => {
   });
   const [compararFan, setCompararFan] = useState(false);
   const [fanModeloExtra, setFanModeloExtra] = useState<string | undefined>(undefined);
+  const [tevexHoodSel, setTevexHoodSel] = useState<string | undefined>(undefined);
+  const [tevexMotorSel, setTevexMotorSel] = useState<string | undefined>(undefined);
+  const [tevexCajaSel, setTevexCajaSel] = useState<string | undefined>(undefined);
 
   // Persistencia en localStorage
   const STORAGE_KEY = "hood_calc_prefs_v1";
@@ -109,14 +112,17 @@ const Index = () => {
       if (typeof saved?.compararFan === 'boolean') setCompararFan(saved.compararFan);
       if (typeof saved?.fanModeloExtra === 'string') setFanModeloExtra(saved.fanModeloExtra);
       if (saved?.tipoInforme === 'cliente' || saved?.tipoInforme === 'tecnico') setTipoInforme(saved.tipoInforme);
+      if (typeof saved?.tevexHoodSel === 'string') setTevexHoodSel(saved.tevexHoodSel);
+      if (typeof saved?.tevexMotorSel === 'string') setTevexMotorSel(saved.tevexMotorSel);
+      if (typeof saved?.tevexCajaSel === 'string') setTevexCajaSel(saved.tevexCajaSel);
     } catch {}
   }, []);
   useEffect(() => {
     try {
-      const toSave = { precios, margenPct, compararFan, fanModeloExtra, tipoInforme };
+      const toSave = { precios, margenPct, compararFan, fanModeloExtra, tipoInforme, tevexHoodSel, tevexMotorSel, tevexCajaSel };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     } catch {}
-  }, [precios, margenPct, compararFan, fanModeloExtra, tipoInforme]);
+  }, [precios, margenPct, compararFan, fanModeloExtra, tipoInforme, tevexHoodSel, tevexMotorSel, tevexCajaSel]);
 
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
@@ -424,6 +430,9 @@ const Index = () => {
         margenPct,
       }, precios);
       bullets(bom.items.map(i => `${i.descripcion} — ${i.cantidad} ${i.unidad}${i.subtotal != null ? ` (${Math.round(i.subtotal)} €)` : ""}`));
+      if (tevexHoodSel) bullets([`Campana TEVEX: ${tevexHoodSel}${(precios as any).campanaTevex ? ` (${Math.round((precios as any).campanaTevex)} €)` : ""}`]);
+      if (tevexMotorSel) bullets([`Motor TEVEX: ${tevexMotorSel}${(precios as any).motorTevex ? ` (${Math.round((precios as any).motorTevex)} €)` : ""}`]);
+      if (tevexCajaSel) bullets([`Caja TEVEX: ${tevexCajaSel}${(precios as any).cajaTevex ? ` (${Math.round((precios as any).cajaTevex)} €)` : ""}`]);
       line(`Subtotal: ${Math.round(bom.total)} €`, { bold: true });
       line(`Total con margen (${margenPct}%): ${Math.round(bom.totalConMargen)} €`, { bold: true });
     } else {
@@ -628,11 +637,12 @@ const Index = () => {
             </CardHeader>
             <CardContent className="space-y-5">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4">
-                  <TabsTrigger value="campana">Campana</TabsTrigger>
+                <TabsList className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-5">
+                  <TabsTrigger value="campana">Configuración</TabsTrigger>
                   <TabsTrigger value="conducto">Conductos</TabsTrigger>
                   <TabsTrigger value="filtros">Filtros</TabsTrigger>
-                  <TabsTrigger value="salida">Aporte/Salida</TabsTrigger>
+                  <TabsTrigger value="salida">Salida</TabsTrigger>
+                  <TabsTrigger value="proyecto">Proyecto</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="campana" className="space-y-4">
@@ -640,7 +650,8 @@ const Index = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label>Modelo TEVEX (opcional)</Label>
-                        <Select onValueChange={(m) => {
+                        <Select value={tevexHoodSel ?? ""} onValueChange={(m) => {
+                          setTevexHoodSel(m);
                           const hood = TEVEX_HOODS.find(h => h.modelo === m);
                           if (!hood) return;
                           setData((d) => ({
@@ -660,7 +671,7 @@ const Index = () => {
                       </div>
                       <div>
                         <Label>Motor TEVEX (opcional)</Label>
-                        <Select value={results.fanModeloSugerido ?? ""} onValueChange={() => { /* reservado para acoplar al catálogo */ }}>
+                        <Select value={tevexMotorSel ?? ""} onValueChange={(m) => setTevexMotorSel(m)}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona motor" />
                           </SelectTrigger>
@@ -677,6 +688,17 @@ const Index = () => {
                             <div className="text-xs text-muted-foreground mt-1">Incluye motor: {lastTevex.motorIncluidoModelo}</div>
                           ) : null;
                         })()}
+                      </div>
+                      <div>
+                        <Label>Caja de ventilación (TEVEX)</Label>
+                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => setTevexCajaSel(m)}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona caja" /></SelectTrigger>
+                          <SelectContent>
+                            {TEVEX_CAJAS.map(c => (
+                              <SelectItem key={c.modelo} value={c.modelo}>{c.modelo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
@@ -784,6 +806,32 @@ const Index = () => {
                       <Input type="number" step="0.1" placeholder="8–12 recomendado" value={data.velocidadDucto}
                         onChange={(e) => onChange("velocidadDucto", parseFloat(e.target.value) || 0)} />
                       {validation.fieldErrors.velocidadDucto && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.velocidadDucto}</p>}
+                    </div>
+                    <div>
+                      <Label>Lugar de expulsión</Label>
+                      <Select value={data.lugarExpulsion} onValueChange={(v) => onChange("lugarExpulsion", v)}>
+                        <SelectTrigger><SelectValue placeholder="Lugar" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tejado">Tejado</SelectItem>
+                          <SelectItem value="fachada">Fachada</SelectItem>
+                          <SelectItem value="ventilación forzada">Ventilación forzada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Orientación salida</Label>
+                      <Select value={data.orientacionSalida} onValueChange={(v) => onChange("orientacionSalida", v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Orientación" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vertical">Vertical</SelectItem>
+                          <SelectItem value="horizontal">Horizontal</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Ruido máx. dB(A) (opcional)</Label>
+                      <Input type="number" value={data.nivelRuidoMax ?? ""}
+                        onChange={(e) => onChange("nivelRuidoMax", e.target.value ? parseFloat(e.target.value) : undefined)} />
                     </div>
                     {data.tipoConducto === "rectangular" && (
                       <>
@@ -930,20 +978,6 @@ const Index = () => {
                                   <div className="font-medium">{selectedFiltro.dpCarbonPa} Pa</div>
                                 </div>
                                 <div>
-                                  <div className="text-xs text-muted-foreground">Tolvas Ø asp/imp</div>
-                                  <div className="font-medium">{selectedFiltro.tolvaAspMm} / {selectedFiltro.tolvaImpMm} mm</div>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Ventilador recomendado</div>
-                                  <div className="font-medium">{selectedFiltro.ventilador} ({selectedFiltro.potenciaKw} kW)</div>
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Dimensiones A×B×C</div>
-                                  <div className="font-medium">{selectedFiltro.dimensiones}</div>
-                                </div>
-                                <div>
                                   <div className="text-xs text-muted-foreground">Δp total filtro</div>
                                   <div className="font-medium">{formato(filtroDpTotal ?? 0,0)} Pa</div>
                                 </div>
@@ -953,14 +987,14 @@ const Index = () => {
                                   Caudal limitado al máximo del filtro seleccionado.
                                 </div>
                               )}
-                              {validation.formErrors.length > 0 && (
-                                <ul className="mt-2 list-disc pl-5 text-xs text-red-600 space-y-1">
-                                  {validation.formErrors.map((e, i) => <li key={i}>{e}</li>)}
-                                </ul>
-                              )}
                             </div>
                           </div>
                         )}
+                        <div>
+                          <Label>Pérdida adicional en filtros (Pa)</Label>
+                          <Input type="number" step="1" value={data.perdidaFiltrosPa}
+                            onChange={(e) => onChange("perdidaFiltrosPa", parseFloat(e.target.value) || 0)} />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -969,69 +1003,13 @@ const Index = () => {
                 <TabsContent value="salida" className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <Label>Tipo de informe</Label>
-                      <Select value={tipoInforme} onValueChange={(v) => setTipoInforme(v as any)}>
-                        <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cliente">Cliente (oferta)</SelectItem>
-                          <SelectItem value="tecnico">Técnico (memoria)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Lugar de expulsión</Label>
-                      <Select value={data.lugarExpulsion} onValueChange={(v) => onChange("lugarExpulsion", v)}>
-                        <SelectTrigger><SelectValue placeholder="Lugar" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="tejado">Tejado</SelectItem>
-                          <SelectItem value="fachada">Fachada</SelectItem>
-                          <SelectItem value="ventilación forzada">Ventilación forzada</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Caja de ventilación (TEVEX)</Label>
-                      <Select onValueChange={() => { /* por ahora informativo */ }}>
-                        <SelectTrigger><SelectValue placeholder="Selecciona caja" /></SelectTrigger>
-                        <SelectContent>
-                          {TEVEX_CAJAS.map(c => (
-                            <SelectItem key={c.modelo} value={c.modelo}>{c.modelo}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Orientación salida</Label>
-                      <Select value={data.orientacionSalida} onValueChange={(v) => onChange("orientacionSalida", v as any)}>
-                        <SelectTrigger><SelectValue placeholder="Orientación" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="vertical">Vertical</SelectItem>
-                          <SelectItem value="horizontal">Horizontal</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Ruido máx. dB(A) (opcional)</Label>
-                      <Input type="number" value={data.nivelRuidoMax ?? ""}
-                        onChange={(e) => onChange("nivelRuidoMax", e.target.value ? parseFloat(e.target.value) : undefined)} />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 pt-6">
-                      <Label>Supresión de incendios</Label>
-                      <Switch checked={data.supresionIncendios} onCheckedChange={(v) => onChange("supresionIncendios", v)} />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Pérdida en filtros (Pa)</Label>
-                      <Input type="number" step="1" value={data.perdidaFiltrosPa}
-                        onChange={(e) => onChange("perdidaFiltrosPa", parseFloat(e.target.value) || 0)} />
-                    </div>
-                    <div>
                       <Label>Pérdida salida/terminal (Pa)</Label>
                       <Input type="number" step="1" value={data.perdidaSalidaPa}
                         onChange={(e) => onChange("perdidaSalidaPa", parseFloat(e.target.value) || 0)} />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <Label>Margen de caudal (%)</Label>
                       <Input type="number" value={data.margenCaudalPct}
@@ -1058,8 +1036,33 @@ const Index = () => {
 
                   <Separator />
 
+                  <div className="text-xs text-muted-foreground">Configura aquí únicamente parámetros del terminal/salida.</div>
+                </TabsContent>
+
+                <TabsContent value="proyecto" className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Tipo de informe</Label>
+                      <Select value={tipoInforme} onValueChange={(v) => setTipoInforme(v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cliente">Cliente (oferta)</SelectItem>
+                          <SelectItem value="tecnico">Técnico (memoria)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-2 flex items-end">
+                      <div className="rounded-md border p-3 w-full">
+                        <div className="text-xs text-muted-foreground">Vista previa</div>
+                        <div className="text-sm">{tipoInforme === 'cliente' ? 'Informe de oferta con BOM y totales' : 'Memoria técnica con curvas y desglose'}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   <div className="space-y-3">
-                    <h4 className="text-sm font-medium">Datos de entrega (para informe)</h4>
+                    <h4 className="text-sm font-medium">Datos de cliente</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label>Cliente</Label>
@@ -1103,45 +1106,32 @@ const Index = () => {
                   <Separator />
 
                   <div className="space-y-3">
-                    <h4 className="text-sm font-medium">Precios y margen</h4>
+                    <h4 className="text-sm font-medium">Gestión de costes</h4>
                     <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                      <div>
+                        <Label>Campana TEVEX (€/ud)</Label>
+                        <Input type="number" onChange={(e) => setPrecios({ ...precios, campanaTevex: parseFloat(e.target.value) || 0 } as any)} />
+                      </div>
+                      <div>
+                        <Label>Motor TEVEX (€/ud)</Label>
+                        <Input type="number" onChange={(e) => setPrecios({ ...precios, motorTevex: parseFloat(e.target.value) || 0 } as any)} />
+                      </div>
+                      <div>
+                        <Label>Caja TEVEX (€/ud)</Label>
+                        <Input type="number" onChange={(e) => setPrecios({ ...precios, cajaTevex: parseFloat(e.target.value) || 0 } as any)} />
+                      </div>
                       <div>
                         <Label>Ducto (€/m)</Label>
                         <Input type="number" value={precios.ductoML}
                           onChange={(e) => setPrecios({ ...precios, ductoML: parseFloat(e.target.value) || 0 })} />
                       </div>
                       <div>
-                        <Label>Codo 90° (€/ud)</Label>
+                        <Label>Accesorios (codo90 €/ud)</Label>
                         <Input type="number" value={precios.codo90}
                           onChange={(e) => setPrecios({ ...precios, codo90: parseFloat(e.target.value) || 0 })} />
                       </div>
                       <div>
-                        <Label>Codo 45° (€/ud)</Label>
-                        <Input type="number" value={precios.codo45}
-                          onChange={(e) => setPrecios({ ...precios, codo45: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div>
-                        <Label>Transición (€/ud)</Label>
-                        <Input type="number" value={precios.transicion}
-                          onChange={(e) => setPrecios({ ...precios, transicion: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div>
-                        <Label>Rejilla (€/ud)</Label>
-                        <Input type="number" value={precios.rejilla}
-                          onChange={(e) => setPrecios({ ...precios, rejilla: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div>
-                        <Label>Compuerta (€/ud)</Label>
-                        <Input type="number" value={precios.compuerta}
-                          onChange={(e) => setPrecios({ ...precios, compuerta: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div>
-                        <Label>Terminal (€/ud)</Label>
-                        <Input type="number" value={precios.terminal}
-                          onChange={(e) => setPrecios({ ...precios, terminal: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div>
-                        <Label>Margen comercial (%)</Label>
+                        <Label>Margen (%)</Label>
                         <Input type="number" value={margenPct}
                           onChange={(e) => setMargenPct(parseFloat(e.target.value) || 0)} />
                       </div>
