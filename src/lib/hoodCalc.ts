@@ -10,6 +10,9 @@ export interface AccessoryCounts {
   compuertas: number;
 }
 
+export type QCalcMode = "perimetro" | "salida";
+export type OutletType = "circular" | "rectangular";
+
 export interface InputData {
   tipoCampana: HoodType;
   L: number; // m
@@ -18,23 +21,36 @@ export interface InputData {
   tipoCocina: string;
   potenciaTermica?: number; // kW
   velocidadCaptura: number; // Vap m/s
-  caudalDiseno?: number; // m3/h
+  caudalDiseno?: number; // m3/h (opcional)
+  // Cálculo de Q
+  calculoQMode?: QCalcMode; // por defecto 'perimetro'
+  salidaTipo?: OutletType;
+  salidaDiamMm?: number; // Ø mm
+  salidaRectAnchoMm?: number; // mm
+  salidaRectAltoMm?: number; // mm
+
+  // Longitudes
   longitudConducto: number; // m (total, compatibilidad)
-  // Nuevas longitudes desglosadas
   longitudHoriz?: number; // m
   longitudVert?: number; // m
-  longitudTransicion?: number; // m
   accesorios: AccessoryCounts;
+
+  // Conducto principal
   tipoConducto: DuctType;
   anchoRect?: number; // m
   altoRect?: number; // m
+
   lugarExpulsion: string;
   orientacionSalida?: "horizontal" | "vertical";
   nivelRuidoMax?: number; // dBA
   supresionIncendios: boolean;
   velocidadDucto: number; // Vd m/s
   margenCaudalPct: number; // % e.g. 15
-  friccionPaPorM: number; // Pa/m
+  // Fricción
+  friccionPaPorM: number; // Pa/m (manual)
+  friccionAuto?: boolean; // si true, calcular automáticamente
+
+  // Pérdidas adicionales
   perdidaFiltrosPa: number; // Pa
   perdidaSalidaPa: number; // Pa
 }
@@ -47,6 +63,7 @@ export interface Results {
   Leq: number; // m
   deltaPf: number; // Pa
   deltaPtotal: number; // Pa
+  friccionUsadaPaPorM: number; // Pa/m
   recomendacionVentilador: string;
   avisos: string[];
   VrectActual?: number; // m/s if rectangular provided
@@ -60,6 +77,11 @@ const EQ_LEN = {
   rejillas: 2,
   compuertas: 2,
 };
+
+// Físicas aire
+const AIR_RHO = 1.2; // kg/m3
+const AIR_MU = 1.8e-5; // Pa*s
+const ROUGHNESS_M = 0.00015; // m (chapa galvanizada aprox.)
 
 // New modular API aligning with requested signatures
 export function calcCaudal(type: HoodType, L: number, F: number, vap: number): number {
@@ -94,7 +116,6 @@ export interface Ventilador {
 }
 
 export function selectVentilador(Q: number, deltaP: number): Ventilador | null {
-  // Placeholder selector. In absence of a catalog, recommend with 25% margin
   const caudalMin = Math.ceil(Q * 1.0);
   const deltaPmin = Math.ceil(deltaP * 1.25);
   return { caudalMin, deltaPmin };
@@ -126,8 +147,9 @@ export function calcLeq(longitud: number, acc: AccessoryCounts) {
   return longitud + extra;
 }
 
-export function calcLeqDetailed(horiz: number, vert: number, transicion: number, acc: AccessoryCounts) {
-  const base = (horiz || 0) + (vert || 0) + (transicion || 0);
+export function calcLeqDetailed(horiz: number, vert: number, _transicion: number, acc: AccessoryCounts) {
+  // transicion en metros ya no se usa; se modela vía accesorios.transiciones
+  const base = (horiz || 0) + (vert || 0);
   return calcLeq(base, acc);
 }
 
@@ -138,7 +160,6 @@ export function calcLosses(Leq: number, friccion: number, perdFiltros: number, p
 }
 
 export function selectFanByCurve(Q: number, deltaP: number): string | undefined {
-  // Choose first fan whose curve has a point with dp >= required at Q within tolerance
   const qReq = Math.round(Q);
   const dpReq = Math.round(deltaP);
   for (const fan of FANS) {
@@ -149,6 +170,14 @@ export function selectFanByCurve(Q: number, deltaP: number): string | undefined 
     }
   }
   return undefined;
+}
+
+export function computeFrictionPaPerMAuto(Dm: number, V: number): number {
+  const Re = (AIR_RHO * V * Dm) / AIR_MU;
+  const relRough = ROUGHNESS_M / Math.max(Dm, 1e-4);
+  const f = 0.25 / Math.pow(Math.log10(relRough / 3.7 + 5.74 / Math.pow(Math.max(Re, 1), 0.9)), 2); // Swamee-Jain
+  const dpPerM = f * (AIR_RHO * V * V) / (2 * Math.max(Dm, 1e-4));
+  return dpPerM; // Pa/m
 }
 
 export function computeAll(input: InputData): Results {
@@ -163,18 +192,45 @@ export function computeAll(input: InputData): Results {
     );
   }
 
-  const Qbase = calcQ(input.tipoCampana, input.L, input.F, input.velocidadCaptura);
+  // Caudal por modo
+  const mode: QCalcMode = input.calculoQMode ?? "perimetro";
+  let Qbase: number;
+  if (mode === "salida") {
+    let Aout = 0;
+    if (input.salidaTipo === "circular" && input.salidaDiamMm && input.salidaDiamMm > 0) {
+      const Dm = input.salidaDiamMm / 1000;
+      Aout = Math.PI * (Dm * Dm) / 4;
+    } else if (input.salidaTipo === "rectangular" && input.salidaRectAnchoMm && input.salidaRectAltoMm) {
+      Aout = (input.salidaRectAnchoMm / 1000) * (input.salidaRectAltoMm / 1000);
+    }
+    if (Aout > 0) {
+      Qbase = Aout * input.velocidadDucto * 3600; // m3/h
+    } else {
+      avisos.push("Falta sección de salida para calcular Q por salida. Se usa perímetro.");
+      Qbase = calcQ(input.tipoCampana, input.L, input.F, input.velocidadCaptura);
+    }
+  } else {
+    Qbase = calcQ(input.tipoCampana, input.L, input.F, input.velocidadCaptura);
+  }
+
   const Qsin = input.caudalDiseno && input.caudalDiseno > 0 ? input.caudalDiseno : Qbase;
   const Q = applyMargin(Qsin, input.margenCaudalPct);
 
   const { Qs, A, Dmm } = calcDuctSection(Q, input.velocidadDucto);
 
-  const totalLong = (input.longitudHoriz ?? 0) + (input.longitudVert ?? 0) + (input.longitudTransicion ?? 0);
-  const Leq = calcLeqDetailed(input.longitudHoriz ?? totalLong, input.longitudVert ?? 0, input.longitudTransicion ?? 0, input.accesorios);
+  const totalLong = (input.longitudHoriz ?? 0) + (input.longitudVert ?? 0);
+  const Leq = calcLeqDetailed(input.longitudHoriz ?? totalLong, input.longitudVert ?? 0, 0, input.accesorios);
+
+  // Fricción
+  let friccionUsada = input.friccionPaPorM;
+  if (input.friccionAuto) {
+    const Dm = Dmm / 1000;
+    friccionUsada = computeFrictionPaPerMAuto(Dm, input.velocidadDucto);
+  }
 
   const { deltaPf, deltaPtotal } = calcLosses(
     Leq,
-    input.friccionPaPorM,
+    friccionUsada,
     input.perdidaFiltrosPa,
     input.perdidaSalidaPa
   );
@@ -191,5 +247,5 @@ export function computeAll(input: InputData): Results {
     ? `Sugerido: ${fanModeloSugerido} para Q ≈ ${Q.toFixed(0)} m³/h y Δp ≥ ${(deltaPtotal).toFixed(0)} Pa.`
     : `Selecciona ventilador con Q ≥ ${Q.toFixed(0)} m³/h y Δp ≥ ${(deltaPtotal * 1.25).toFixed(0)} Pa (margen 25%).`;
 
-  return { Q, Qs, Areq: A, Dmm, Leq, deltaPf, deltaPtotal, recomendacionVentilador, avisos, VrectActual, fanModeloSugerido };
+  return { Q, Qs, Areq: A, Dmm, Leq, deltaPf, deltaPtotal, friccionUsadaPaPorM: friccionUsada, recomendacionVentilador, avisos, VrectActual, fanModeloSugerido };
 }

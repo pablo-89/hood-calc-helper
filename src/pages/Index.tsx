@@ -37,10 +37,14 @@ const Index = () => {
     alturaInstalacion: 0.7,
     tipoCocina: "gas",
     velocidadCaptura: 0.3, // mural por defecto
+    // Cálculo de Q
+    calculoQMode: "perimetro",
+    salidaTipo: "circular",
+    salidaDiamMm: 300,
+    // Longitudes
     longitudConducto: 10,
     longitudHoriz: 5,
     longitudVert: 4,
-    longitudTransicion: 1,
     accesorios: { codo90: 2, codo45: 0, transiciones: 1, rejillas: 1, compuertas: 1 },
     tipoConducto: "circular",
     lugarExpulsion: "tejado",
@@ -48,7 +52,10 @@ const Index = () => {
     supresionIncendios: true,
     velocidadDucto: 10,
     margenCaudalPct: 15,
+    // Fricción
     friccionPaPorM: 1.0,
+    friccionAuto: true,
+    // Pérdidas
     perdidaFiltrosPa: 80,
     perdidaSalidaPa: 50,
   });
@@ -611,6 +618,47 @@ const Index = () => {
                 <TabsContent value="campana" className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
+                      <Label>Método de Q</Label>
+                      <Select value={data.calculoQMode ?? "perimetro"} onValueChange={(v) => onChange("calculoQMode", v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Modo" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="perimetro">Perímetro × Vap</SelectItem>
+                          <SelectItem value="salida">Sección salida × Vd</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {data.calculoQMode === "salida" && (
+                      <>
+                        <div>
+                          <Label>Tipo salida</Label>
+                          <Select value={data.salidaTipo ?? "circular"} onValueChange={(v) => onChange("salidaTipo", v as any)}>
+                            <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="circular">Circular</SelectItem>
+                              <SelectItem value="rectangular">Rectangular</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {data.salidaTipo === "circular" ? (
+                          <div>
+                            <Label>Ø salida (mm)</Label>
+                            <Input type="number" value={data.salidaDiamMm ?? ""} onChange={(e) => onChange("salidaDiamMm", parseFloat(e.target.value) || 0)} />
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <Label>Ancho salida (mm)</Label>
+                              <Input type="number" value={data.salidaRectAnchoMm ?? ""} onChange={(e) => onChange("salidaRectAnchoMm", parseFloat(e.target.value) || 0)} />
+                            </div>
+                            <div>
+                              <Label>Alto salida (mm)</Label>
+                              <Input type="number" value={data.salidaRectAltoMm ?? ""} onChange={(e) => onChange("salidaRectAltoMm", parseFloat(e.target.value) || 0)} />
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                    <div>
                       <Label>Tipo de campana</Label>
                       <Select value={data.tipoCampana} onValueChange={(v) => onChange("tipoCampana", v as any)}>
                         <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
@@ -762,6 +810,10 @@ const Index = () => {
                           <TooltipTrigger asChild>
                             <div className="flex items-center justify-between">
                               <Label>Fricción (Pa/m)</Label>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Auto</span>
+                                <Switch checked={!!data.friccionAuto} onCheckedChange={(v) => onChange("friccionAuto", v)} />
+                              </div>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent><p>{helperText.friccion}</p></TooltipContent>
@@ -769,6 +821,7 @@ const Index = () => {
                       </TooltipProvider>
                       <Input type="number" step="0.1" value={data.friccionPaPorM}
                         onChange={(e) => onChange("friccionPaPorM", parseFloat(e.target.value) || 0)} />
+                      <div className="text-xs text-muted-foreground mt-1">Usada: {formato(results.friccionUsadaPaPorM,1)} Pa/m</div>
                     </div>
                   </div>
 
@@ -1085,6 +1138,7 @@ const Index = () => {
                   <Stat label="Longitud equivalente" value={`${formato(results.Leq,1)} m`} />
                   <Stat label="Δp fricción" value={`${formato(results.deltaPf,0)} Pa`} />
                   <Stat label="Δp total" value={`${formato(results.deltaPtotal,0)} Pa`} />
+                  <Stat label="Fricción usada" value={`${formato(results.friccionUsadaPaPorM,1)} Pa/m`} />
                   {results.VrectActual && (
                     <Stat label="V en conducto rectangular" value={`${formato(results.VrectActual,2)} m/s`} />
                   )}
