@@ -101,6 +101,7 @@ const Index = () => {
   const [tevexHoodSel, setTevexHoodSel] = useState<string | undefined>(undefined);
   const [tevexMotorSel, setTevexMotorSel] = useState<string | undefined>(undefined);
   const [tevexCajaSel, setTevexCajaSel] = useState<string | undefined>(undefined);
+  const [curveVersion, setCurveVersion] = useState(0);
 
   // Persistencia en localStorage
   const STORAGE_KEY = "hood_calc_prefs_v1";
@@ -145,6 +146,32 @@ const Index = () => {
     });
   }, [tevexHoodSel, data.L, data.F]);
 
+  useEffect(() => {
+    // Intentar cargar curva real desde CSV en public/curvas/<modelo>.csv cuando hay selección TEVEX
+    const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
+    if (!sourceName) return;
+    if (TEVEX_CURVES[sourceName]) return; // ya cargada
+    const csvPath = `/curvas/${encodeURIComponent(sourceName)}.csv`;
+    fetch(csvPath)
+      .then(async (r) => {
+        if (!r.ok) return;
+        const txt = await r.text();
+        const lines = txt.split(/\r?\n/).filter(Boolean);
+        const points = lines.map(l => {
+          const parts = l.split(/[,;\t]/).map(s => s.trim());
+          const q = parseFloat(parts[0]);
+          const dp = parseFloat(parts[1]);
+          return { Q: q, dp: dp };
+        }).filter(p => Number.isFinite(p.Q) && Number.isFinite(p.dp));
+        if (points.length >= 2) {
+          // mutate dataset and bump version to trigger recompute
+          (TEVEX_CURVES as any)[sourceName] = points;
+          setCurveVersion(v => v + 1);
+        }
+      })
+      .catch(() => {});
+  }, [tevexMotorSel, tevexCajaSel]);
+
   const { results, filtroClamped, filtroDpTotal } = useMemo(() => {
     const Qsin = data.caudalDiseno && data.caudalDiseno > 0
       ? data.caudalDiseno
@@ -179,10 +206,12 @@ const Index = () => {
       ? FANS.find(f => f.modelo === results.fanModeloSugerido)
       : (selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined);
     if (found) return found;
-    // Si hay selección TEVEX y existe curva real, usarla
+    // Si hay selección TEVEX y existe curva real, usarla (procede de dataset o CSV público)
     const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
-    if (sourceName && TEVEX_CURVES[sourceName]) {
-      return { modelo: sourceName, curva: TEVEX_CURVES[sourceName] };
+    if (sourceName) {
+      if (TEVEX_CURVES[sourceName]) {
+        return { modelo: sourceName, curva: TEVEX_CURVES[sourceName] } as any;
+      }
     }
     if (!sourceName) return undefined;
     // Fallback: generar curva sintética para TEVEX si hay selección de motor o caja
@@ -219,10 +248,10 @@ const Index = () => {
       })();
       if (base.length === 0) return undefined;
       const curva = base.map(p => ({ Q: Math.round(p.Q * scaleQ), dp: Math.round(p.dp * scaleDp) }));
-      return { modelo: sourceName, curva };
+      return { modelo: sourceName, curva } as any;
     })();
-    return gen;
-  }, [results.fanModeloSugerido, selectedFiltro, tevexMotorSel, tevexCajaSel]);
+    return gen as any;
+  }, [results.fanModeloSugerido, selectedFiltro, tevexMotorSel, tevexCajaSel, curveVersion]);
 
   const fanChartModelExtra = useMemo(() => {
     if (!compararFan || !fanModeloExtra) return undefined;
