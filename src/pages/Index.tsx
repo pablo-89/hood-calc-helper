@@ -163,10 +163,50 @@ const Index = () => {
   const validation = useMemo(() => validateInput(data, { filtroOn, filtro: selectedFiltro, dpFiltroLimpio }), [data, filtroOn, selectedFiltro, dpFiltroLimpio]);
 
   const fanChartModel = useMemo(() => {
-    if (results.fanModeloSugerido) return FANS.find(f => f.modelo === results.fanModeloSugerido);
-    if (selectedFiltro) return FANS.find(f => f.modelo === selectedFiltro.ventilador);
-    return undefined;
-  }, [results.fanModeloSugerido, selectedFiltro]);
+    const found = results.fanModeloSugerido
+      ? FANS.find(f => f.modelo === results.fanModeloSugerido)
+      : (selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined);
+    if (found) return found;
+    // Fallback: generar curva sintética para TEVEX si hay selección de motor o caja
+    const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
+    if (!sourceName) return undefined;
+    const gen = (() => {
+      const m = sourceName.toUpperCase();
+      const series = m.startsWith("TMI 400") || m.includes("TMI 400") ? "TMI400"
+        : m.startsWith("TMI") ? "TMI"
+        : m.startsWith("TMT4") ? "TMT4"
+        : m.startsWith("TMT") ? "TMT"
+        : m.startsWith("TSO") ? "TSO"
+        : m.startsWith("TSOR") ? "TSOR"
+        : undefined;
+      if (!series) return undefined;
+      const sizeMatch = m.match(/(\d{2})\/(\d{2})/);
+      const sizeA = sizeMatch ? parseInt(sizeMatch[1], 10) : (m.match(/\b(\d{3})\b/) ? parseInt(m.match(/\b(\d{3})\b/)[1], 10) / 10 : 10);
+      const baseSize = 10;
+      const r = sizeA / baseSize;
+      const cvMatch = m.match(/(\d+,?\d*)\s*CV/);
+      const cv = cvMatch ? parseFloat(cvMatch[1].replace(',', '.')) : undefined;
+      const baseCv = 0.75;
+      const pwr = cv ? Math.max(cv / baseCv, 0.5) : 1;
+      const scaleQ = Math.pow(r, 3) * Math.pow(pwr, 1/3);
+      const scaleDp = Math.pow(r, 2) * Math.pow(pwr, 2/3);
+      const base: { Q: number; dp: number }[] = (() => {
+        switch (series) {
+          case "TMI": return [{ Q: 1000, dp: 420 }, { Q: 1500, dp: 360 }, { Q: 2000, dp: 300 }, { Q: 2500, dp: 240 }, { Q: 3000, dp: 180 }];
+          case "TMI400": return [{ Q: 900, dp: 500 }, { Q: 1400, dp: 440 }, { Q: 1900, dp: 380 }, { Q: 2400, dp: 320 }, { Q: 2900, dp: 260 }];
+          case "TMT": return [{ Q: 2000, dp: 500 }, { Q: 3000, dp: 440 }, { Q: 4000, dp: 380 }, { Q: 5000, dp: 320 }, { Q: 6000, dp: 260 }];
+          case "TMT4": return [{ Q: 1800, dp: 520 }, { Q: 2800, dp: 460 }, { Q: 3800, dp: 400 }, { Q: 4800, dp: 340 }, { Q: 5800, dp: 280 }];
+          case "TSO": return [{ Q: 1500, dp: 700 }, { Q: 2500, dp: 600 }, { Q: 3500, dp: 500 }, { Q: 4500, dp: 400 }, { Q: 5500, dp: 300 }];
+          case "TSOR": return [{ Q: 1200, dp: 550 }, { Q: 2000, dp: 480 }, { Q: 3000, dp: 410 }, { Q: 4000, dp: 340 }, { Q: 5000, dp: 270 }];
+          default: return [];
+        }
+      })();
+      if (base.length === 0) return undefined;
+      const curva = base.map(p => ({ Q: Math.round(p.Q * scaleQ), dp: Math.round(p.dp * scaleDp) }));
+      return { modelo: sourceName, curva };
+    })();
+    return gen;
+  }, [results.fanModeloSugerido, selectedFiltro, tevexMotorSel, tevexCajaSel]);
 
   const fanChartModelExtra = useMemo(() => {
     if (!compararFan || !fanModeloExtra) return undefined;
@@ -707,7 +747,7 @@ const Index = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Tipo de campana</Label>
-                      <Select value={data.tipoCampana} onValueChange={(v) => onChange("tipoCampana", v as any)}>
+                      <Select value={data.tipoCampana} onValueChange={(v) => onChange("tipoCampana", v as any)} disabled={Boolean(tevexHoodSel)}>
                         <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="mural">Mural (pared)</SelectItem>
