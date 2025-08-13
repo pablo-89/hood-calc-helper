@@ -134,6 +134,17 @@ const Index = () => {
     }));
   }, [data.tipoCampana]);
 
+  useEffect(() => {
+    if (!tevexHoodSel) return;
+    const isMonoblock = /Monoblock/i.test(tevexHoodSel);
+    const isMonoblock400 = /400º\/?2H/i.test(tevexHoodSel);
+    if (!isMonoblock) return;
+    import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblock }) => {
+      const motor = selectMotorForMonoblock(tevexHoodSel, data.L, data.F, isMonoblock400);
+      if (motor) setTevexMotorSel(motor);
+    });
+  }, [tevexHoodSel, data.L, data.F]);
+
   const { results, filtroClamped, filtroDpTotal } = useMemo(() => {
     const Qsin = data.caudalDiseno && data.caudalDiseno > 0
       ? data.caudalDiseno
