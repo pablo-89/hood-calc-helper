@@ -37,10 +37,6 @@ const Index = () => {
     alturaInstalacion: 0.7,
     tipoCocina: "gas",
     velocidadCaptura: 0.3, // mural por defecto
-    // Cálculo de Q
-    calculoQMode: "perimetro",
-    salidaTipo: "circular",
-    salidaDiamMm: 300,
     // Longitudes
     longitudConducto: 10,
     longitudHoriz: 5,
@@ -617,47 +613,6 @@ const Index = () => {
 
                 <TabsContent value="campana" className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Método de Q</Label>
-                      <Select value={data.calculoQMode ?? "perimetro"} onValueChange={(v) => onChange("calculoQMode", v as any)}>
-                        <SelectTrigger><SelectValue placeholder="Modo" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="perimetro">Perímetro × Vap</SelectItem>
-                          <SelectItem value="salida">Sección salida × Vd</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {data.calculoQMode === "salida" && (
-                      <>
-                        <div>
-                          <Label>Tipo salida</Label>
-                          <Select value={data.salidaTipo ?? "circular"} onValueChange={(v) => onChange("salidaTipo", v as any)}>
-                            <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="circular">Circular</SelectItem>
-                              <SelectItem value="rectangular">Rectangular</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {data.salidaTipo === "circular" ? (
-                          <div>
-                            <Label>Ø salida (mm)</Label>
-                            <Input type="number" value={data.salidaDiamMm ?? ""} onChange={(e) => onChange("salidaDiamMm", parseFloat(e.target.value) || 0)} />
-                          </div>
-                        ) : (
-                          <>
-                            <div>
-                              <Label>Ancho salida (mm)</Label>
-                              <Input type="number" value={data.salidaRectAnchoMm ?? ""} onChange={(e) => onChange("salidaRectAnchoMm", parseFloat(e.target.value) || 0)} />
-                            </div>
-                            <div>
-                              <Label>Alto salida (mm)</Label>
-                              <Input type="number" value={data.salidaRectAltoMm ?? ""} onChange={(e) => onChange("salidaRectAltoMm", parseFloat(e.target.value) || 0)} />
-                            </div>
-                          </>
-                        )}
-                      </>
-                    )}
                     <div>
                       <Label>Tipo de campana</Label>
                       <Select value={data.tipoCampana} onValueChange={(v) => onChange("tipoCampana", v as any)}>
