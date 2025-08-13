@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { validateInput } from "@/lib/validation";
 import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
+import { TEVEX_HOODS, TEVEX_FANS } from "@/data/tevex";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
 
@@ -612,6 +613,41 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="campana" className="space-y-4">
+                  <div className="rounded-md border p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label>Modelo TEVEX (opcional)</Label>
+                        <Select onValueChange={(m) => {
+                          const hood = TEVEX_HOODS.find(h => h.modelo === m);
+                          if (!hood) return;
+                          setData((d) => ({
+                            ...d,
+                            tipoCampana: hood.tipo,
+                            L: hood.LdefaultM,
+                            F: hood.FdefaultM,
+                          }));
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
+                          <SelectContent>
+                            {TEVEX_HOODS.map(h => (
+                              <SelectItem key={h.modelo} value={h.modelo}>{h.modelo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Motor TEVEX (opcional)</Label>
+                        <Select onValueChange={() => { /* reservado para acoplar al catálogo */ }}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona motor" /></SelectTrigger>
+                          <SelectContent>
+                            {TEVEX_FANS.map(f => (
+                              <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Tipo de campana</Label>
