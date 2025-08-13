@@ -3,11 +3,16 @@ export interface TevexHood {
   tipo: "mural" | "central";
   LdefaultM: number;
   FdefaultM: number;
+  motorIncluidoModelo?: string; // si el modelo viene con motor
 }
 
 export interface TevexFan {
   modelo: string;
   referencia?: string;
+}
+
+export interface TevexCaja {
+  modelo: string;
 }
 
 // Valores por defecto razonables si no hay ficha (se ajustarán con el catálogo detallado)
@@ -24,8 +29,8 @@ export const TEVEX_HOODS: TevexHood[] = [
   { modelo: "Óptima integral central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
   { modelo: "Óptima compensada mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
   { modelo: "Óptima compensada central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
-  { modelo: "Óptima Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
-  { modelo: "Óptima Monoblock central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
+  { modelo: "Óptima Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL, motorIncluidoModelo: "TMI" },
+  { modelo: "Óptima Monoblock central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL, motorIncluidoModelo: "TMI" },
 
   // Premium
   { modelo: "Premium básica mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
@@ -34,8 +39,8 @@ export const TEVEX_HOODS: TevexHood[] = [
   { modelo: "Premium integral central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
   { modelo: "Premium compensada mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
   { modelo: "Premium compensada central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
-  { modelo: "Premium Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
-  { modelo: "Premium Monoblock central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
+  { modelo: "Premium Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL, motorIncluidoModelo: "TMI" },
+  { modelo: "Premium Monoblock central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL, motorIncluidoModelo: "TMI" },
   { modelo: "Premium Inductora mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
   { modelo: "Premium Inductora central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
 
@@ -43,7 +48,7 @@ export const TEVEX_HOODS: TevexHood[] = [
   { modelo: "Invertida básica mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
   { modelo: "Invertida integral mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
   { modelo: "Invertida compensada mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
-  { modelo: "Invertida Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
+  { modelo: "Invertida Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL, motorIncluidoModelo: "TMI" },
 
   // Low
   { modelo: "Low básica mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
@@ -52,8 +57,8 @@ export const TEVEX_HOODS: TevexHood[] = [
   { modelo: "Low integral central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
   { modelo: "Low compensada mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
   { modelo: "Low compensada central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
-  { modelo: "Low Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL },
-  { modelo: "Low Monoblock central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
+  { modelo: "Low Monoblock mural", tipo: "mural", LdefaultM: DEF_L_MURAL, FdefaultM: DEF_F_MURAL, motorIncluidoModelo: "TMI" },
+  { modelo: "Low Monoblock central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL, motorIncluidoModelo: "TMI" },
 
   // Perimetral (según índice aparecen referencias central)
   { modelo: "Perimetral básica central", tipo: "central", LdefaultM: DEF_L_CENTRAL, FdefaultM: DEF_F_CENTRAL },
@@ -71,4 +76,13 @@ export const TEVEX_FANS: TevexFan[] = [
   { modelo: "TMT4 400º/2H" },
   { modelo: "TSO 400º/2H" },
   { modelo: "TSOR" },
+];
+
+export const TEVEX_CAJAS: TevexCaja[] = [
+  { modelo: "Caja TMT4 LUX 400º/2H" },
+  { modelo: "Caja TMT" },
+  { modelo: "Caja TSO 400º/2H" },
+  { modelo: "Caja TMI4 400º/2H" },
+  { modelo: "Caja TMI" },
+  { modelo: "Caja TSOR" },
 ];
