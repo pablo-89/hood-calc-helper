@@ -18,7 +18,7 @@ import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
 import { TEVEX_HOODS, TEVEX_FANS } from "@/data/tevex";
 import { TEVEX_CAJAS } from "@/data/tevex";
-import { TEVEX_CURVES } from "@/data/tevexCurves";
+import { TEVEX_CURVES, normalizeCurveKey } from "@/data/tevexCurves";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
 import { FanCurveChart } from "@/components/FanCurveChart";
@@ -151,7 +151,8 @@ const Index = () => {
     const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
     if (!sourceName) return;
     if (TEVEX_CURVES[sourceName]) return; // ya cargada
-    const csvPath = `/curvas/${encodeURIComponent(sourceName)}.csv`;
+    const key = normalizeCurveKey(sourceName) ?? sourceName;
+    const csvPath = `/curvas/${encodeURIComponent(key)}.csv`;
     fetch(csvPath)
       .then(async (r) => {
         if (!r.ok) return;
@@ -165,7 +166,7 @@ const Index = () => {
         }).filter(p => Number.isFinite(p.Q) && Number.isFinite(p.dp));
         if (points.length >= 2) {
           // mutate dataset and bump version to trigger recompute
-          (TEVEX_CURVES as any)[sourceName] = points;
+          (TEVEX_CURVES as any)[key] = points;
           setCurveVersion(v => v + 1);
         }
       })
@@ -209,8 +210,9 @@ const Index = () => {
     // Si hay selección TEVEX y existe curva real, usarla (procede de dataset o CSV público)
     const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
     if (sourceName) {
-      if (TEVEX_CURVES[sourceName]) {
-        return { modelo: sourceName, curva: TEVEX_CURVES[sourceName] } as any;
+      const key = normalizeCurveKey(sourceName) ?? sourceName;
+      if (TEVEX_CURVES[key]) {
+        return { modelo: key, curva: TEVEX_CURVES[key] } as any;
       }
     }
     if (!sourceName) return undefined;
