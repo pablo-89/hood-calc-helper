@@ -149,7 +149,7 @@ export function calcLeq(longitud: number, acc: AccessoryCounts) {
 
 export function calcLeqDetailed(horiz: number, vert: number, _transicion: number, acc: AccessoryCounts) {
   // transicion en metros ya no se usa; se modela vía accesorios.transiciones
-  const base = (horiz || 0) + (vert || 0);
+  const base = (horiz || 0) + (vert || 0) + (_transicion || 0);
   return calcLeq(base, acc);
 }
 
