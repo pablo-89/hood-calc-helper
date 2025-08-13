@@ -26,12 +26,13 @@ export function FanCurveChart({
   extraName?: string;
   tolBox?: { qMin: number; qMax: number; dpMin: number; dpMax: number };
 }) {
+  const formatTick = (v: number) => String(v);
   return (
     <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
       <LineChart data={mainCurve} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={(v) => `${v}`} />
-        <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`} />
+        <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={formatTick} />
+        <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={formatTick} />
         {qTicks?.map((x) => (
           <ReferenceLine key={`vx-${x}`} x={x} stroke="currentColor" strokeOpacity={0.08} />
         ))}
