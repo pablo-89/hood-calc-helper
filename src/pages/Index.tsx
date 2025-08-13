@@ -16,6 +16,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { validateInput } from "@/lib/validation";
 import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
@@ -303,8 +305,42 @@ const Index = () => {
       // Curva del ventilador (si hay modelo coincidente)
       const fanModel = selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined;
       if (fanModel) {
-        sep("Curva del ventilador (tabla)");
-        bullets(fanModel.curva.map(p => `Q=${p.Q} m³/h → Δp=${p.dp} Pa`));
+        sep("Curva del ventilador");
+        // Área de grafico
+        const gx = marginX;
+        const gy = y;
+        const gw = pageWidth - marginX * 2;
+        const gh = 60;
+        // Escalas simples
+        const qs = fanModel.curva.map(p => p.Q);
+        const dps = fanModel.curva.map(p => p.dp);
+        const qMin = Math.min(...qs, 0);
+        const qMax = Math.max(...qs, Math.round(results.Q));
+        const dpMin = 0;
+        const dpMax = Math.max(...dps, Math.round(results.deltaPtotal));
+        const sx = (q: number) => gx + (q - qMin) / Math.max(1, qMax - qMin) * gw;
+        const sy = (dp: number) => gy + gh - (dp - dpMin) / Math.max(1, dpMax - dpMin) * gh;
+        // Ejes
+        doc.setDrawColor(180);
+        doc.line(gx, gy + gh, gx + gw, gy + gh);
+        doc.line(gx, gy, gx, gy + gh);
+        // Curva
+        doc.setDrawColor(0);
+        for (let i = 0; i < fanModel.curva.length - 1; i++) {
+          const a = fanModel.curva[i];
+          const b = fanModel.curva[i + 1];
+          doc.line(sx(a.Q), sy(a.dp), sx(b.Q), sy(b.dp));
+        }
+        // Punto de operación
+        const px = sx(Math.round(results.Q));
+        const py = sy(Math.round(results.deltaPtotal));
+        doc.setFillColor(200, 0, 0);
+        doc.circle(px, py, 1.8, 'F');
+        // Etiquetas
+        doc.setFontSize(9);
+        doc.text(`Q (m³/h)`, gx + gw, gy + gh + 5, { align: 'right' });
+        doc.text(`Δp (Pa)`, gx, gy - 2);
+        y += gh + 10;
       }
     }
 
@@ -873,6 +909,25 @@ const Index = () => {
                 </div>
 
                 <Separator />
+
+                {/* Curva ventilador y punto de operación */}
+                {selectedFiltro && (
+                  <div>
+                    <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
+                    <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
+                      <LineChart data={(FANS.find(f => f.modelo === selectedFiltro.ventilador)?.curva || []).map(p => ({ q: p.Q, dp: p.dp }))} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="q" tickFormatter={(v) => `${v}`} />
+                        <YAxis dataKey="dp" tickFormatter={(v) => `${v}`} />
+                        <Line type="monotone" dataKey="dp" stroke="hsl(var(--primary))" dot={false} />
+                        <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartLegend content={<ChartLegendContent />} />
+                      </LineChart>
+                    </ChartContainer>
+                    <p className="text-xs text-muted-foreground mt-1">Punto operación: Q={formato(results.Q,0)} m³/h, Δp={formato(results.deltaPtotal,0)} Pa</p>
+                  </div>
+                )}
 
                 <div>
                   <h3 className="text-base font-medium mb-1">Desglose de pérdidas</h3>
