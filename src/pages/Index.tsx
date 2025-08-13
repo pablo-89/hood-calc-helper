@@ -102,6 +102,8 @@ const Index = () => {
   const [tevexMotorSel, setTevexMotorSel] = useState<string | undefined>(undefined);
   const [tevexCajaSel, setTevexCajaSel] = useState<string | undefined>(undefined);
   const [curveVersion, setCurveVersion] = useState(0);
+  const [compararCaja, setCompararCaja] = useState(false);
+  const [tevexCajaExtraSel, setTevexCajaExtraSel] = useState<string | undefined>(undefined);
 
   // Persistencia en localStorage
   const STORAGE_KEY = "hood_calc_prefs_v1";
@@ -149,14 +151,14 @@ const Index = () => {
 
   useEffect(() => {
     // Intentar cargar curva real desde CSV en public/curvas/<modelo>.csv cuando hay selección TEVEX
-    const sourceName = tevexCajaSel ?? undefined;
-    if (!sourceName) return;
-    if (TEVEX_CURVES[sourceName]) return; // ya cargada
-    const key = normalizeCurveKey(sourceName) ?? sourceName;
-    const safeKey = key.replaceAll('/', ':');
-    const csvPath = `/curvas/${encodeURIComponent(safeKey)}.csv`;
-    fetch(csvPath)
-      .then(async (r) => {
+    const tryLoad = async (name?: string) => {
+      if (!name) return;
+      if ((TEVEX_CURVES as any)[name]) return;
+      const key = normalizeCurveKey(name) ?? name;
+      const safeKey = key.replaceAll('/', ':');
+      const csvPath = `/curvas/${encodeURIComponent(safeKey)}.csv`;
+      try {
+        const r = await fetch(csvPath);
         if (!r.ok) return;
         const txt = await r.text();
         const lines = txt.split(/\r?\n/).filter(Boolean);
@@ -167,13 +169,14 @@ const Index = () => {
           return { Q: q, dp: dp };
         }).filter(p => Number.isFinite(p.Q) && Number.isFinite(p.dp));
         if (points.length >= 2) {
-          // mutate dataset and bump version to trigger recompute
           (TEVEX_CURVES as any)[key] = points;
           setCurveVersion(v => v + 1);
         }
-      })
-      .catch(() => {});
-  }, [tevexCajaSel]);
+      } catch {}
+    };
+    tryLoad(tevexCajaSel);
+    tryLoad(tevexCajaExtraSel);
+  }, [tevexCajaSel, tevexCajaExtraSel]);
 
   const { results, filtroClamped, filtroDpTotal } = useMemo(() => {
     const Qsin = data.caudalDiseno && data.caudalDiseno > 0
@@ -258,9 +261,11 @@ const Index = () => {
   }, [results.fanModeloSugerido, selectedFiltro, tevexCajaSel, curveVersion]);
 
   const fanChartModelExtra = useMemo(() => {
-    if (!compararFan || !fanModeloExtra) return undefined;
-    return FANS.find(f => f.modelo === fanModeloExtra);
-  }, [compararFan, fanModeloExtra]);
+    if (!compararCaja || !tevexCajaExtraSel) return undefined;
+    const key = normalizeCurveKey(tevexCajaExtraSel) ?? tevexCajaExtraSel;
+    if (TEVEX_CURVES[key]) return { modelo: key, curva: TEVEX_CURVES[key] } as any;
+    return undefined;
+  }, [compararCaja, tevexCajaExtraSel, curveVersion]);
 
   const generateTicks = (min: number, max: number, count = 5) => {
     if (max <= min) return [min, max];
@@ -774,7 +779,7 @@ const Index = () => {
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
-                                                 <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(""); }} >
+                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(""); }} >
                           <SelectTrigger><SelectValue placeholder="Selecciona caja" /></SelectTrigger>
                           <SelectContent>
                             {TEVEX_CAJAS.map(c => (
@@ -782,6 +787,22 @@ const Index = () => {
                             ))}
                           </SelectContent>
                         </Select>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2">
+                            <Switch checked={compararCaja} onCheckedChange={setCompararCaja} />
+                            <span className="text-sm">Comparar caja</span>
+                          </div>
+                          {compararCaja && (
+                            <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)}>
+                              <SelectTrigger><SelectValue placeholder="Caja a comparar" /></SelectTrigger>
+                              <SelectContent>
+                                {TEVEX_CAJAS.map(c => (
+                                  <SelectItem key={`cmp-${c.modelo}`} value={c.modelo}>{c.modelo}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1277,7 +1298,7 @@ const Index = () => {
                     </div>
                     <FanCurveChart
                       mainCurve={interpCurve.map(p => ({ q: p.q, dp: p.dp }))}
-                      extraCurve={compararFan ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
+                      extraCurve={compararCaja ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
                       systemCurve={systemCurve}
                       qTicks={qTicks}
                       dpTicks={dpTicks}
