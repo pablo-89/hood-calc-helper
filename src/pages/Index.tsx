@@ -20,6 +20,7 @@ import { TEVEX_HOODS, TEVEX_FANS } from "@/data/tevex";
 import { TEVEX_CAJAS } from "@/data/tevex";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
+import { FanCurveChart } from "@/components/FanCurveChart";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
@@ -1180,30 +1181,16 @@ const Index = () => {
                         </div>
                       )}
                     </div>
-                    <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
-                      <LineChart data={interpCurve} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={(v) => `${v}`} />
-                        <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`} />
-                        {/* Gridlines at ticks */}
-                        {qTicks?.map((x) => (
-                          <ReferenceLine key={`vx-${x}`} x={x} stroke="currentColor" strokeOpacity={0.1} />
-                        ))}
-                        {dpTicks?.map((y) => (
-                          <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.1} />
-                        ))}
-                        <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModel?.modelo ?? ""}`} stroke="hsl(var(--primary))" dot={false} />
-                        {compararFan && interpCurveExtra.length > 0 && (
-                          <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModelExtra?.modelo ?? ""}`} data={interpCurveExtra} stroke="hsl(var(--secondary))" dot={false} />
-                        )}
-                        {/* Crosshair at operation point */}
-                        <ReferenceLine x={Math.round(results.Q)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
-                        <ReferenceLine y={Math.round(results.deltaPtotal)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
-                        <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" label={{ position: 'top', value: `Q=${Math.round(results.Q)} Δp=${Math.round(results.deltaPtotal)}` }} />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <ChartLegend content={<ChartLegendContent />} />
-                      </LineChart>
-                    </ChartContainer>
+                    <FanCurveChart
+                      mainCurve={interpCurve.map(p => ({ q: p.q, dp: p.dp }))}
+                      extraCurve={compararFan ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
+                      qTicks={qTicks}
+                      dpTicks={dpTicks}
+                      qOp={results.Q}
+                      dpOp={results.deltaPtotal}
+                      mainName={`Curva ventilador ${fanChartModel?.modelo ?? ""}`}
+                      extraName={fanChartModelExtra?.modelo}
+                    />
                     <p className="text-xs text-muted-foreground mt-1">Punto operación: Q={formato(results.Q,0)} m³/h, Δp={formato(results.deltaPtotal,0)} Pa</p>
                     {qTicks && dpTicks && (
                       <div className="text-[10px] text-muted-foreground mt-1">
