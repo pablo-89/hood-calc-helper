@@ -33,6 +33,7 @@ const helperText = {
 };
 
 const Index = () => {
+  const buildStamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const [data, setData] = useState<InputData>({
     tipoCampana: "mural",
     L: 2,
@@ -625,6 +626,7 @@ const Index = () => {
             <p className="mt-3 text-muted-foreground">
               Introduce los datos del proyecto y obtén caudal (Q), sección/diámetro de conducto y Δp total con recomendaciones.
             </p>
+            <div className="mt-2 text-[10px] text-muted-foreground">Build: {buildStamp}</div>
           </div>
         </div>
       </header>
