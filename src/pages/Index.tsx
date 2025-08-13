@@ -439,6 +439,9 @@ const Index = () => {
         doc.line(gx, py, gx + gw, py);
         ;(doc as any).setLineDash?.([], 0);
         doc.circle(px, py, 1.8, 'F');
+        doc.setFontSize(8);
+        const label = `${results.fanModeloSugerido ? results.fanModeloSugerido + ' — ' : ''}Q=${Math.round(results.Q)} m³/h, Δp=${Math.round(results.deltaPtotal)} Pa`;
+        doc.text(label, Math.min(px + 4, gx + gw - 10), Math.max(py - 4, gy + 8));
         // Etiquetas
         doc.setFontSize(9);
         doc.text(`Q (m³/h)`, gx + gw, gy + gh + 12, { align: 'right' });
@@ -1055,11 +1058,11 @@ const Index = () => {
                         {dpTicks?.map((y) => (
                           <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.1} />
                         ))}
-                        <Line type="monotone" dataKey="dp" stroke="hsl(var(--primary))" dot={false} />
+                        <Line type="monotone" dataKey="dp" name={`Curva ventilador ${fanChartModel?.modelo ?? ""}`} stroke="hsl(var(--primary))" dot={false} />
                         {/* Crosshair at operation point */}
                         <ReferenceLine x={Math.round(results.Q)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
                         <ReferenceLine y={Math.round(results.deltaPtotal)} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
-                        <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" />
+                        <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" label={{ position: 'top', value: `Q=${Math.round(results.Q)} Δp=${Math.round(results.deltaPtotal)}` }} />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <ChartLegend content={<ChartLegendContent />} />
                       </LineChart>
