@@ -228,6 +228,27 @@ const Index = () => {
     return out;
   }, [fanChartModelExtra]);
 
+  const systemCurve = useMemo(() => {
+    // Δp = K * Q^2 passing through operation point
+    const Qop = Math.max(results.Q, 1);
+    const K = results.deltaPtotal / (Qop * Qop);
+    const qs = qTicks && qTicks.length > 1 ? [qTicks[0], qTicks[qTicks.length - 1]] : [Math.round(Qop * 0.2), Math.round(Qop * 1.8)];
+    const sampled: { q: number; dp: number }[] = [];
+    const steps = 20;
+    const qMin = Math.max(1, Math.min(...qs));
+    const qMax = Math.max(...qs);
+    for (let i = 0; i <= steps; i++) {
+      const q = Math.round(qMin + (qMax - qMin) * (i / steps));
+      sampled.push({ q, dp: Math.round(K * q * q) });
+    }
+    return sampled;
+  }, [results.Q, results.deltaPtotal, qTicks]);
+
+  const tolBox = useMemo(() => {
+    const qOp = results.Q; const dpOp = results.deltaPtotal;
+    return { qMin: Math.round(qOp * 0.95), qMax: Math.round(qOp * 1.05), dpMin: Math.round(dpOp * 0.9), dpMax: Math.round(dpOp * 1.1) };
+  }, [results.Q, results.deltaPtotal]);
+
   const onChange = (field: keyof InputData, value: any) => {
     setData((d) => ({ ...d, [field]: value }));
   };
@@ -1184,12 +1205,14 @@ const Index = () => {
                     <FanCurveChart
                       mainCurve={interpCurve.map(p => ({ q: p.q, dp: p.dp }))}
                       extraCurve={compararFan ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
+                      systemCurve={systemCurve}
                       qTicks={qTicks}
                       dpTicks={dpTicks}
                       qOp={results.Q}
                       dpOp={results.deltaPtotal}
                       mainName={`Curva ventilador ${fanChartModel?.modelo ?? ""}`}
                       extraName={fanChartModelExtra?.modelo}
+                      tolBox={tolBox}
                     />
                     <p className="text-xs text-muted-foreground mt-1">Punto operación: Q={formato(results.Q,0)} m³/h, Δp={formato(results.deltaPtotal,0)} Pa</p>
                     {qTicks && dpTicks && (

@@ -1,26 +1,30 @@
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
+import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine, ReferenceArea } from "recharts";
 
 export interface FanCurvePoint { q: number; dp: number }
 
 export function FanCurveChart({
   mainCurve,
   extraCurve,
+  systemCurve,
   qTicks,
   dpTicks,
   qOp,
   dpOp,
   mainName,
   extraName,
+  tolBox,
 }: {
   mainCurve: FanCurvePoint[];
   extraCurve?: FanCurvePoint[];
+  systemCurve?: FanCurvePoint[];
   qTicks?: number[];
   dpTicks?: number[];
   qOp: number;
   dpOp: number;
   mainName: string;
   extraName?: string;
+  tolBox?: { qMin: number; qMax: number; dpMin: number; dpMax: number };
 }) {
   return (
     <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
@@ -29,11 +33,17 @@ export function FanCurveChart({
         <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={(v) => `${v}`} />
         <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`} />
         {qTicks?.map((x) => (
-          <ReferenceLine key={`vx-${x}`} x={x} stroke="currentColor" strokeOpacity={0.1} />
+          <ReferenceLine key={`vx-${x}`} x={x} stroke="currentColor" strokeOpacity={0.08} />
         ))}
         {dpTicks?.map((y) => (
-          <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.1} />
+          <ReferenceLine key={`hy-${y}`} y={y} stroke="currentColor" strokeOpacity={0.08} />
         ))}
+        {tolBox && (
+          <ReferenceArea x1={tolBox.qMin} x2={tolBox.qMax} y1={tolBox.dpMin} y2={tolBox.dpMax} fill="hsl(var(--accent))" fillOpacity={0.08} />
+        )}
+        {systemCurve && systemCurve.length > 0 && (
+          <Line type="monotone" dataKey="dp" name="Curva del sistema" data={systemCurve} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" dot={false} />
+        )}
         <Line type="monotone" dataKey="dp" name={mainName} stroke="hsl(var(--primary))" dot={false} />
         {extraCurve && extraCurve.length > 0 && (
           <Line type="monotone" dataKey="dp" name={extraName ?? "Curva comparada"} data={extraCurve} stroke="hsl(var(--secondary))" dot={false} />
