@@ -152,7 +152,8 @@ const Index = () => {
     if (!sourceName) return;
     if (TEVEX_CURVES[sourceName]) return; // ya cargada
     const key = normalizeCurveKey(sourceName) ?? sourceName;
-    const csvPath = `/curvas/${encodeURIComponent(key)}.csv`;
+    const safeKey = key.replaceAll('/', ':');
+    const csvPath = `/curvas/${encodeURIComponent(safeKey)}.csv`;
     fetch(csvPath)
       .then(async (r) => {
         if (!r.ok) return;
