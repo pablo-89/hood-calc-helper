@@ -14,7 +14,8 @@ import { ELECTRO_FILTERS } from "@/lib/electroFilters";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { validateInput } from "@/lib/validation";
-import { computeBOM } from "@/lib/budget";
+import { computeBOM, defaultFanPrices } from "@/lib/budget";
+import { FANS } from "@/data/fans";
 
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
@@ -70,6 +71,17 @@ const Index = () => {
     observaciones: "",
   });
   const [tipoInforme, setTipoInforme] = useState<"cliente" | "tecnico">("cliente");
+  const [margenPct, setMargenPct] = useState<number>(20);
+  const [precios, setPrecios] = useState({
+    ductoML: 35,
+    codo90: 18,
+    codo45: 16,
+    transicion: 22,
+    rejilla: 28,
+    compuerta: 30,
+    terminal: 95,
+    ventilador: defaultFanPrices(),
+  });
 
   // Ajustar Vap recomendado según tipo campana si el usuario no lo ha cambiado manualmente
   useEffect(() => {
@@ -275,8 +287,11 @@ const Index = () => {
         diametroMm: results.Dmm,
         ventiladorSugerido: selectedFiltro?.ventilador,
         electroFiltroModelo: filtroOn ? selectedFiltro?.modelo : undefined,
-      });
-      bullets(bom.items.map(i => `${i.descripcion} — ${i.cantidad} ${i.unidad}`));
+        margenPct,
+      }, precios);
+      bullets(bom.items.map(i => `${i.descripcion} — ${i.cantidad} ${i.unidad}${i.subtotal != null ? ` (${Math.round(i.subtotal)} €)` : ""}`));
+      line(`Subtotal: ${Math.round(bom.total)} €`, { bold: true });
+      line(`Total con margen (${margenPct}%): ${Math.round(bom.totalConMargen)} €`, { bold: true });
     } else {
       sep("Recomendaciones");
       bullets([
@@ -284,6 +299,13 @@ const Index = () => {
         "Mantenimiento y limpieza de filtros cada ~500 h de uso.",
         "Verificar niveles de ruido según exigencias del local.",
       ]);
+
+      // Curva del ventilador (si hay modelo coincidente)
+      const fanModel = selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined;
+      if (fanModel) {
+        sep("Curva del ventilador (tabla)");
+        bullets(fanModel.curva.map(p => `Q=${p.Q} m³/h → Δp=${p.dp} Pa`));
+      }
     }
 
     if (entrega.observaciones) {
@@ -769,6 +791,54 @@ const Index = () => {
                       <div className="sm:col-span-2">
                         <Label>Observaciones</Label>
                         <Input value={entrega.observaciones} onChange={(e) => setEntrega({ ...entrega, observaciones: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Precios y margen</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                      <div>
+                        <Label>Ducto (€/m)</Label>
+                        <Input type="number" value={precios.ductoML}
+                          onChange={(e) => setPrecios({ ...precios, ductoML: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Codo 90° (€/ud)</Label>
+                        <Input type="number" value={precios.codo90}
+                          onChange={(e) => setPrecios({ ...precios, codo90: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Codo 45° (€/ud)</Label>
+                        <Input type="number" value={precios.codo45}
+                          onChange={(e) => setPrecios({ ...precios, codo45: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Transición (€/ud)</Label>
+                        <Input type="number" value={precios.transicion}
+                          onChange={(e) => setPrecios({ ...precios, transicion: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Rejilla (€/ud)</Label>
+                        <Input type="number" value={precios.rejilla}
+                          onChange={(e) => setPrecios({ ...precios, rejilla: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Compuerta (€/ud)</Label>
+                        <Input type="number" value={precios.compuerta}
+                          onChange={(e) => setPrecios({ ...precios, compuerta: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Terminal (€/ud)</Label>
+                        <Input type="number" value={precios.terminal}
+                          onChange={(e) => setPrecios({ ...precios, terminal: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label>Margen comercial (%)</Label>
+                        <Input type="number" value={margenPct}
+                          onChange={(e) => setMargenPct(parseFloat(e.target.value) || 0)} />
                       </div>
                     </div>
                   </div>
