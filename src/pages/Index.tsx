@@ -126,6 +126,36 @@ const Index = () => {
   // Validación en tiempo real
   const validation = useMemo(() => validateInput(data, { filtroOn, filtro: selectedFiltro, dpFiltroLimpio }), [data, filtroOn, selectedFiltro, dpFiltroLimpio]);
 
+  const fanChartModel = useMemo(() => {
+    if (results.fanModeloSugerido) return FANS.find(f => f.modelo === results.fanModeloSugerido);
+    if (selectedFiltro) return FANS.find(f => f.modelo === selectedFiltro.ventilador);
+    return undefined;
+  }, [results.fanModeloSugerido, selectedFiltro]);
+
+  const generateTicks = (min: number, max: number, count = 5) => {
+    if (max <= min) return [min, max];
+    const step = (max - min) / (count - 1);
+    const ticks: number[] = [];
+    for (let i = 0; i < count; i++) ticks.push(Math.round(min + i * step));
+    return Array.from(new Set(ticks));
+  };
+
+  const qTicks = useMemo(() => {
+    const qs = fanChartModel?.curva.map(p => p.Q) ?? [];
+    if (qs.length === 0) return undefined;
+    const min = Math.min(...qs, Math.round(results.Q));
+    const max = Math.max(...qs, Math.round(results.Q));
+    return generateTicks(min, max, 5);
+  }, [fanChartModel, results.Q]);
+
+  const dpTicks = useMemo(() => {
+    const dps = fanChartModel?.curva.map(p => p.dp) ?? [];
+    if (dps.length === 0) return undefined;
+    const min = 0;
+    const max = Math.max(...dps, Math.round(results.deltaPtotal));
+    return generateTicks(min, max, 5);
+  }, [fanChartModel, results.deltaPtotal]);
+
   const onChange = (field: keyof InputData, value: any) => {
     setData((d) => ({ ...d, [field]: value }));
   };
@@ -333,6 +363,27 @@ const Index = () => {
         doc.setDrawColor(180);
         doc.line(gx, gy + gh, gx + gw, gy + gh);
         doc.line(gx, gy, gx, gy + gh);
+        // ticks
+        const makeTicks = (min: number, max: number, n = 5) => {
+          const out: number[] = [];
+          if (max <= min) return [min, max];
+          const step = (max - min) / (n - 1);
+          for (let i = 0; i < n; i++) out.push(Math.round(min + i * step));
+          return out;
+        };
+        const qTicksPdf = makeTicks(qMin, qMax, 5);
+        const dpTicksPdf = makeTicks(dpMin, dpMax, 5);
+        doc.setFontSize(8);
+        qTicksPdf.forEach(v => {
+          const x = sx(v);
+          doc.line(x, gy + gh, x, gy + gh + 2);
+          doc.text(String(v), x, gy + gh + 6, { align: 'center' });
+        });
+        dpTicksPdf.forEach(v => {
+          const ytick = sy(v);
+          doc.line(gx - 2, ytick, gx, ytick);
+          doc.text(String(v), gx - 4, ytick + 2, { align: 'right' });
+        });
         // Curva
         doc.setDrawColor(0);
         for (let i = 0; i < fanModel.curva.length - 1; i++) {
@@ -347,9 +398,9 @@ const Index = () => {
         doc.circle(px, py, 1.8, 'F');
         // Etiquetas
         doc.setFontSize(9);
-        doc.text(`Q (m³/h)`, gx + gw, gy + gh + 5, { align: 'right' });
+        doc.text(`Q (m³/h)`, gx + gw, gy + gh + 12, { align: 'right' });
         doc.text(`Δp (Pa)`, gx, gy - 2);
-        y += gh + 10;
+        y += gh + 16;
       }
     }
 
@@ -946,14 +997,14 @@ const Index = () => {
                 <Separator />
 
                 {/* Curva ventilador y punto de operación */}
-                {selectedFiltro && (
+                {fanChartModel && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
                     <ChartContainer config={{ q: { label: "Q (m³/h)" }, dp: { label: "Δp (Pa)" } }}>
-                      <LineChart data={(FANS.find(f => f.modelo === selectedFiltro.ventilador)?.curva || []).map(p => ({ q: p.Q, dp: p.dp }))} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
+                      <LineChart data={fanChartModel.curva.map(p => ({ q: p.Q, dp: p.dp }))} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="q" tickFormatter={(v) => `${v}`} />
-                        <YAxis dataKey="dp" tickFormatter={(v) => `${v}`} />
+                        <XAxis dataKey="q" domain={qTicks ? [qTicks[0], qTicks[qTicks.length - 1]] : undefined} ticks={qTicks} tickFormatter={(v) => `${v}`} />
+                        <YAxis dataKey="dp" domain={dpTicks ? [dpTicks[0], dpTicks[dpTicks.length - 1]] : undefined} ticks={dpTicks} tickFormatter={(v) => `${v}`} />
                         <Line type="monotone" dataKey="dp" stroke="hsl(var(--primary))" dot={false} />
                         <ReferenceDot x={Math.round(results.Q)} y={Math.round(results.deltaPtotal)} r={4} fill="hsl(var(--destructive))" stroke="none" />
                         <ChartTooltip content={<ChartTooltipContent />} />
@@ -961,6 +1012,12 @@ const Index = () => {
                       </LineChart>
                     </ChartContainer>
                     <p className="text-xs text-muted-foreground mt-1">Punto operación: Q={formato(results.Q,0)} m³/h, Δp={formato(results.deltaPtotal,0)} Pa</p>
+                    {qTicks && dpTicks && (
+                      <div className="text-[10px] text-muted-foreground mt-1">
+                        <div>Horiz (Q m³/h): {qTicks.join(" · ")}</div>
+                        <div>Vert (Δp Pa): {dpTicks.join(" · ")}</div>
+                      </div>
+                    )}
                   </div>
                 )}
 
