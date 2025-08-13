@@ -149,7 +149,7 @@ const Index = () => {
 
   useEffect(() => {
     // Intentar cargar curva real desde CSV en public/curvas/<modelo>.csv cuando hay selección TEVEX
-    const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
+    const sourceName = tevexCajaSel ?? undefined;
     if (!sourceName) return;
     if (TEVEX_CURVES[sourceName]) return; // ya cargada
     const key = normalizeCurveKey(sourceName) ?? sourceName;
@@ -173,7 +173,7 @@ const Index = () => {
         }
       })
       .catch(() => {});
-  }, [tevexMotorSel, tevexCajaSel]);
+  }, [tevexCajaSel]);
 
   const { results, filtroClamped, filtroDpTotal } = useMemo(() => {
     const Qsin = data.caudalDiseno && data.caudalDiseno > 0
@@ -210,7 +210,7 @@ const Index = () => {
       : (selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined);
     if (found) return found;
     // Si hay selección TEVEX y existe curva real, usarla (procede de dataset o CSV público)
-    const sourceName = tevexMotorSel ?? tevexCajaSel ?? undefined;
+    const sourceName = tevexCajaSel ?? undefined;
     if (sourceName) {
       const key = normalizeCurveKey(sourceName) ?? sourceName;
       if (TEVEX_CURVES[key]) {
@@ -255,7 +255,7 @@ const Index = () => {
       return { modelo: sourceName, curva } as any;
     })();
     return gen as any;
-  }, [results.fanModeloSugerido, selectedFiltro, tevexMotorSel, tevexCajaSel, curveVersion]);
+  }, [results.fanModeloSugerido, selectedFiltro, tevexCajaSel, curveVersion]);
 
   const fanChartModelExtra = useMemo(() => {
     if (!compararFan || !fanModeloExtra) return undefined;
@@ -771,26 +771,6 @@ const Index = () => {
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div>
-                        <Label>Motor TEVEX (opcional)</Label>
-                                                 <Select value={tevexMotorSel ?? ""} onValueChange={(m) => { setTevexMotorSel(m); setTevexCajaSel(""); }} >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona motor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {TEVEX_FANS.map(f => (
-                              <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {(() => {
-                          // pista visual si el modelo tiene motor incluido
-                          const lastTevex = TEVEX_HOODS.find(h => data.tipoCampana === h.tipo && data.L === h.LdefaultM && data.F === h.FdefaultM && h.motorIncluidoModelo);
-                          return lastTevex?.motorIncluidoModelo ? (
-                            <div className="text-xs text-muted-foreground mt-1">Incluye motor: {lastTevex.motorIncluidoModelo}</div>
-                          ) : null;
-                        })()}
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
