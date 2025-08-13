@@ -23,9 +23,9 @@ const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
 
 const helperText = {
-  vap: "0,30 m/s (recomendado para campana mural). 0,25 m/s para central.",
-  vd: "5–15 m/s habitual. 8–12 m/s recomendado para cocinas.",
-  alturaGas: "Altura recomendada gas: 0,70–0,80 m. Eléctrica: 0,65–0,75 m.",
+  vap: "Valores típicos industriales: 0,25–0,50 m/s según campana y duty.",
+  vd: "7–12 m/s recomendado en extracción de grasas; ajustar por ruido.",
+  alturaGas: "Industrial: 0,90–1,20 m sobre plano de cocción (ver fabricante).",
   friccion: "Fricción típica 0,6–1,5 Pa/m según rugosidad y velocidad.",
 };
 
@@ -38,9 +38,13 @@ const Index = () => {
     tipoCocina: "gas",
     velocidadCaptura: 0.3, // mural por defecto
     longitudConducto: 10,
+    longitudHoriz: 5,
+    longitudVert: 4,
+    longitudTransicion: 1,
     accesorios: { codo90: 2, codo45: 0, transiciones: 1, rejillas: 1, compuertas: 1 },
     tipoConducto: "circular",
     lugarExpulsion: "tejado",
+    orientacionSalida: "vertical",
     supresionIncendios: true,
     velocidadDucto: 10,
     margenCaudalPct: 15,
@@ -110,6 +114,7 @@ const Index = () => {
 
     const inputForCompute: InputData = {
       ...data,
+      longitudConducto: (data.longitudHoriz ?? 0) + (data.longitudVert ?? 0) + (data.longitudTransicion ?? 0),
       caudalDiseno: filtroOn && selectedFiltro ? caudalDisenoOverride : data.caudalDiseno,
       perdidaFiltrosPa: data.perdidaFiltrosPa + dpFiltroTotal,
     };
@@ -271,7 +276,11 @@ const Index = () => {
     const reqDp = Math.round(results.deltaPtotal * 1.25);
     kv("Q requerido", `${reqQ} m³/h`);
     kv("Δp requerido", `${reqDp} Pa (margen 25%)`);
-    if (selectedFiltro) kv("Modelo orientativo", `${selectedFiltro.ventilador} (${selectedFiltro.potenciaKw} kW)`);
+    if (results.fanModeloSugerido) {
+      kv("Modelo sugerido por curva", `${results.fanModeloSugerido}`);
+    } else if (selectedFiltro) {
+      kv("Modelo orientativo (filtro)", `${selectedFiltro.ventilador} (${selectedFiltro.potenciaKw} kW)`);
+    }
 
     if (tipoInforme === "tecnico" && (validation.formErrors.length > 0 || validation.warnings.length > 0)) {
       sep("Avisos y verificaciones");
@@ -303,7 +312,7 @@ const Index = () => {
       ]);
 
       // Curva del ventilador (si hay modelo coincidente)
-      const fanModel = selectedFiltro ? FANS.find(f => f.modelo === selectedFiltro.ventilador) : undefined;
+      const fanModel = results.fanModeloSugerido ? FANS.find(f => f.modelo === results.fanModeloSugerido) : undefined;
       if (fanModel) {
         sep("Curva del ventilador");
         // Área de grafico
@@ -580,9 +589,25 @@ const Index = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Longitud total de conducto (m)</Label>
-                      <Input type="number" step="0.1" value={data.longitudConducto}
-                        onChange={(e) => onChange("longitudConducto", parseFloat(e.target.value) || 0)} />
+                      <Label>Tramo horizontal (m)</Label>
+                      <Input type="number" step="0.1" value={data.longitudHoriz ?? 0}
+                        onChange={(e) => onChange("longitudHoriz", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label>Tramo vertical (m)</Label>
+                      <Input type="number" step="0.1" value={data.longitudVert ?? 0}
+                        onChange={(e) => onChange("longitudVert", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label>Transición (m)</Label>
+                      <Input type="number" step="0.1" value={data.longitudTransicion ?? 0}
+                        onChange={(e) => onChange("longitudTransicion", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div className="flex items-end">
+                      <div className="rounded-md border p-3 w-full">
+                        <div className="text-xs text-muted-foreground">Longitud total</div>
+                        <div className="font-semibold">{formato((data.longitudHoriz ?? 0) + (data.longitudVert ?? 0) + (data.longitudTransicion ?? 0), 1)} m</div>
+                      </div>
                     </div>
                     <div>
                       <TooltipProvider>
@@ -738,6 +763,16 @@ const Index = () => {
                           <SelectItem value="tejado">Tejado</SelectItem>
                           <SelectItem value="fachada">Fachada</SelectItem>
                           <SelectItem value="ventilación forzada">Ventilación forzada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Orientación salida</Label>
+                      <Select value={data.orientacionSalida} onValueChange={(v) => onChange("orientacionSalida", v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Orientación" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vertical">Vertical</SelectItem>
+                          <SelectItem value="horizontal">Horizontal</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -944,6 +979,9 @@ const Index = () => {
                 <div>
                   <h3 className="text-base font-medium mb-1">Selección de ventilador</h3>
                   <p className="text-sm text-muted-foreground">{results.recomendacionVentilador}</p>
+                  {results.fanModeloSugerido && (
+                    <p className="text-xs text-muted-foreground">Modelo sugerido por curva: {results.fanModeloSugerido}</p>
+                  )}
                 </div>
 
                 {(results.avisos.length > 0 || validation.warnings.length > 0 || validation.formErrors.length > 0 || filtroClamped) && (

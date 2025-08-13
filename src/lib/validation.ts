@@ -4,20 +4,23 @@ import type { ElectroFilter } from "./electroFilters";
 
 export const inputSchema = z.object({
   tipoCampana: z.enum(["mural", "central"]),
-  L: z.number().min(0.5, { message: "L debe ser ≥ 0,5 m" }).max(5, { message: "L debe ser ≤ 5 m" }),
+  L: z.number().min(0.5, { message: "L debe ser ≥ 0,5 m" }).max(8, { message: "L debe ser ≤ 8 m" }),
   F: z.number().min(0.5, { message: "F debe ser ≥ 0,5 m" }).max(5, { message: "F debe ser ≤ 5 m" }),
   alturaInstalacion: z
     .number()
-    .min(0.5, { message: "Altura no válida" })
+    .min(0.6, { message: "Altura no válida" })
     .max(2.5, { message: "Altura no válida" }),
   tipoCocina: z.string().min(1),
   potenciaTermica: z.number().optional(),
   velocidadCaptura: z
     .number({ invalid_type_error: "El valor ingresado no es numérico." })
     .min(0.1, { message: "Vap debe ser ≥ 0,1 m/s" })
-    .max(0.5, { message: "Vap debe ser ≤ 0,5 m/s" }),
+    .max(0.7, { message: "Vap debe ser ≤ 0,7 m/s" }),
   caudalDiseno: z.number().optional(),
-  longitudConducto: z.number().min(0, { message: "Longitud ≥ 0" }).max(200, { message: "Longitud demasiado alta" }),
+  longitudConducto: z.number().min(0, { message: "Longitud ≥ 0" }).max(500, { message: "Longitud demasiado alta" }),
+  longitudHoriz: z.number().optional(),
+  longitudVert: z.number().optional(),
+  longitudTransicion: z.number().optional(),
   accesorios: z.object({
     codo90: z.number().min(0),
     codo45: z.number().min(0),
@@ -29,12 +32,13 @@ export const inputSchema = z.object({
   anchoRect: z.number().optional(),
   altoRect: z.number().optional(),
   lugarExpulsion: z.string().min(1),
+  orientacionSalida: z.enum(["horizontal", "vertical"]).optional(),
   nivelRuidoMax: z.number().optional(),
   supresionIncendios: z.boolean(),
   velocidadDucto: z
     .number({ invalid_type_error: "El valor ingresado no es numérico." })
     .min(5, { message: "Vd debe ser ≥ 5 m/s" })
-    .max(15, { message: "Vd debe ser ≤ 15 m/s" }),
+    .max(18, { message: "Vd debe ser ≤ 18 m/s" }),
   margenCaudalPct: z.number().min(0).max(50),
   friccionPaPorM: z.number().min(0.1).max(5),
   perdidaFiltrosPa: z.number().min(0),
@@ -65,12 +69,11 @@ export function validateInput(
     }
   }
 
-  // Altura recomendada según cocina
-  const gas = data.tipoCocina.toLowerCase().includes("gas");
-  const minH = gas ? 0.7 : 0.65;
-  const maxH = gas ? 0.8 : 0.75;
+  // Altura recomendada industrial
+  const minH = 0.9;
+  const maxH = 1.2;
   if (data.alturaInstalacion < minH || data.alturaInstalacion > maxH) {
-    warnings.push(`Altura recomendada ${minH}–${maxH} m para ${data.tipoCocina}.`);
+    warnings.push(`Altura recomendada sobre plano de cocción: ${minH}–${maxH} m (industrial).`);
   }
 
   // Rectangular requiere dimensiones
@@ -85,7 +88,6 @@ export function validateInput(
   let qExceedsFilter = false;
   let QpreMargin: number | undefined = undefined;
   if (opts?.filtroOn && opts?.filtro) {
-    // Caudal calculado con margen vs caudalMax del filtro
     const perimetroLibre = data.tipoCampana === "mural" ? data.L + 2 * data.F : 2 * data.L + 2 * data.F;
     const Qbase = perimetroLibre * data.velocidadCaptura * 3600; // m3/h
     const Qsin = data.caudalDiseno && data.caudalDiseno > 0 ? data.caudalDiseno : Qbase;
@@ -96,6 +98,12 @@ export function validateInput(
         `El caudal calculado (${Math.round(QpreMargin)} m³/h) supera el máximo del filtro seleccionado (${opts.filtro.caudalMax} m³/h).`
       );
     }
+  }
+
+  // Longitudes coherentes
+  const sum = (data.longitudHoriz ?? 0) + (data.longitudVert ?? 0) + (data.longitudTransicion ?? 0);
+  if (sum > 0 && Math.abs(sum - (data.longitudConducto || 0)) > 0.5) {
+    warnings.push(`Longitud total por tramos (${sum.toFixed(1)} m) difiere de la total (${(data.longitudConducto||0).toFixed(1)} m). Se usará el desglose.`);
   }
 
   return { fieldErrors, formErrors, warnings, qExceedsFilter, QpreMargin };

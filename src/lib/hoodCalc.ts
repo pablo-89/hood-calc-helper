@@ -1,3 +1,4 @@
+import { FANS } from "@/data/fans";
 export type HoodType = "mural" | "central";
 export type DuctType = "circular" | "rectangular";
 
@@ -13,17 +14,22 @@ export interface InputData {
   tipoCampana: HoodType;
   L: number; // m
   F: number; // m
-  alturaInstalacion: number; // m
+  alturaInstalacion: number; // m (industrial, sobre plano de cocción sugerido 0.9–1.2 m)
   tipoCocina: string;
   potenciaTermica?: number; // kW
   velocidadCaptura: number; // Vap m/s
   caudalDiseno?: number; // m3/h
-  longitudConducto: number; // m
+  longitudConducto: number; // m (total, compatibilidad)
+  // Nuevas longitudes desglosadas
+  longitudHoriz?: number; // m
+  longitudVert?: number; // m
+  longitudTransicion?: number; // m
   accesorios: AccessoryCounts;
   tipoConducto: DuctType;
   anchoRect?: number; // m
   altoRect?: number; // m
   lugarExpulsion: string;
+  orientacionSalida?: "horizontal" | "vertical";
   nivelRuidoMax?: number; // dBA
   supresionIncendios: boolean;
   velocidadDucto: number; // Vd m/s
@@ -44,6 +50,7 @@ export interface Results {
   recomendacionVentilador: string;
   avisos: string[];
   VrectActual?: number; // m/s if rectangular provided
+  fanModeloSugerido?: string;
 }
 
 const EQ_LEN = {
@@ -119,21 +126,40 @@ export function calcLeq(longitud: number, acc: AccessoryCounts) {
   return longitud + extra;
 }
 
+export function calcLeqDetailed(horiz: number, vert: number, transicion: number, acc: AccessoryCounts) {
+  const base = (horiz || 0) + (vert || 0) + (transicion || 0);
+  return calcLeq(base, acc);
+}
+
 export function calcLosses(Leq: number, friccion: number, perdFiltros: number, perdSalida: number) {
   const deltaPf = friccion * Leq; // Pa
   const deltaPtotal = deltaPf + perdFiltros + perdSalida;
   return { deltaPf, deltaPtotal };
 }
 
+export function selectFanByCurve(Q: number, deltaP: number): string | undefined {
+  // Choose first fan whose curve has a point with dp >= required at Q within tolerance
+  const qReq = Math.round(Q);
+  const dpReq = Math.round(deltaP);
+  for (const fan of FANS) {
+    for (const pt of fan.curva) {
+      if (pt.Q >= qReq && pt.dp >= dpReq) {
+        return fan.modelo;
+      }
+    }
+  }
+  return undefined;
+}
+
 export function computeAll(input: InputData): Results {
   const avisos: string[] = [];
 
-  // Altura recomendada
+  // Altura recomendada industrial (sobre plano cocción)
   const h = input.alturaInstalacion;
-  const rango = input.tipoCocina.toLowerCase().includes("gas") ? [0.7, 0.8] : [0.65, 0.75];
+  const rango: [number, number] = [0.9, 1.2];
   if (h < rango[0] || h > rango[1]) {
     avisos.push(
-      `Altura instalación recomendada ${rango[0]}–${rango[1]} m para ${input.tipoCocina}.`
+      `Altura sobre plano de cocción recomendada ${rango[0]}–${rango[1]} m en campanas industriales (ver fabricante).`
     );
   }
 
@@ -142,7 +168,10 @@ export function computeAll(input: InputData): Results {
   const Q = applyMargin(Qsin, input.margenCaudalPct);
 
   const { Qs, A, Dmm } = calcDuctSection(Q, input.velocidadDucto);
-  const Leq = calcLeq(input.longitudConducto, input.accesorios);
+
+  const totalLong = (input.longitudHoriz ?? 0) + (input.longitudVert ?? 0) + (input.longitudTransicion ?? 0);
+  const Leq = calcLeqDetailed(input.longitudHoriz ?? totalLong, input.longitudVert ?? 0, input.longitudTransicion ?? 0, input.accesorios);
+
   const { deltaPf, deltaPtotal } = calcLosses(
     Leq,
     input.friccionPaPorM,
@@ -156,9 +185,11 @@ export function computeAll(input: InputData): Results {
     VrectActual = Qs / Arect;
   }
 
-  const recomendacionVentilador = `Selecciona ventilador con Q ≥ ${Q.toFixed(
-    0
-  )} m³/h y Δp ≥ ${(deltaPtotal * 1.25).toFixed(0)} Pa (margen 25%).`;
+  const fanModeloSugerido = selectFanByCurve(Q, deltaPtotal);
 
-  return { Q, Qs, Areq: A, Dmm, Leq, deltaPf, deltaPtotal, recomendacionVentilador, avisos, VrectActual };
+  const recomendacionVentilador = fanModeloSugerido
+    ? `Sugerido: ${fanModeloSugerido} para Q ≈ ${Q.toFixed(0)} m³/h y Δp ≥ ${(deltaPtotal).toFixed(0)} Pa.`
+    : `Selecciona ventilador con Q ≥ ${Q.toFixed(0)} m³/h y Δp ≥ ${(deltaPtotal * 1.25).toFixed(0)} Pa (margen 25%).`;
+
+  return { Q, Qs, Areq: A, Dmm, Leq, deltaPf, deltaPtotal, recomendacionVentilador, avisos, VrectActual, fanModeloSugerido };
 }
