@@ -1278,24 +1278,7 @@ const Index = () => {
                 {fanChartModel && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Switch checked={compararFan} onCheckedChange={setCompararFan} />
-                        <span className="text-sm">Comparar con otro modelo</span>
-                      </div>
-                      {compararFan && (
-                        <div>
-                          <Select value={fanModeloExtra ?? ""} onValueChange={setFanModeloExtra}>
-                            <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
-                            <SelectContent>
-                              {FANS.map(f => (
-                                <SelectItem key={f.modelo} value={f.modelo}>{f.modelo}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </div>
+                    {/* Comparador antiguo de FANS eliminado; usar comparador de Cajas TEVEX arriba */}
                     <FanCurveChart
                       mainCurve={interpCurve.map(p => ({ q: p.q, dp: p.dp }))}
                       extraCurve={compararCaja ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
