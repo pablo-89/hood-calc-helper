@@ -707,6 +707,17 @@ const Index = () => {
                             L: hood.LdefaultM,
                             F: hood.FdefaultM,
                           }));
+                          // Autoselección de motor si el modelo incorpora motor o es Monoblock
+                          const isMonoblock = /Monoblock/i.test(m);
+                          const isMonoblock400 = /400º\/?2H/i.test(m);
+                          if (isMonoblock) {
+                            import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblock }) => {
+                              const motor = selectMotorForMonoblock(m, hood.LdefaultM, hood.FdefaultM, isMonoblock400);
+                              if (motor) setTevexMotorSel(motor);
+                            });
+                          } else if (hood.motorIncluidoModelo) {
+                            setTevexMotorSel(hood.motorIncluidoModelo);
+                          }
                         }}>
                           <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
                           <SelectContent>
