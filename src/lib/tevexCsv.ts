@@ -31,11 +31,15 @@ function extractFondoYReferencia(raw: unknown): { fondoMm?: number; referencia?:
 }
 
 export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
+  '/BSD-CAMP.CSV',
+  '/bsd-camp.csv',
   '/TARIFA_TEVEX_2024.csv',
   '/TARIFA TEVEX 2024.csv',
   '/TEVEX_CAMPANAS.csv',
   '/campanas_tevex.csv',
   '/TARIFA TEVEX CAMPANAS.csv',
+  '/public/BSD-CAMP.CSV',
+  '/public/bsd-camp.csv',
   '/public/TARIFA_TEVEX_2024.csv',
   '/public/TARIFA TEVEX 2024.csv',
   '/public/TEVEX_CAMPANAS.csv',
