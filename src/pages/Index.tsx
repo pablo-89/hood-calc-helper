@@ -106,6 +106,7 @@ const Index = () => {
   const [compararCaja, setCompararCaja] = useState(false);
   const [tevexCajaExtraSel, setTevexCajaExtraSel] = useState<string | undefined>(undefined);
   const [tevexHoodsCsv, setTevexHoodsCsv] = useState<TevexHoodCsvEntry[] | undefined>(undefined);
+  const [qRefFiltros, setQRefFiltros] = useState<number | undefined>(undefined);
   useEffect(() => {
     loadTevexHoodsFromCsv().then(setTevexHoodsCsv).catch(() => {});
   }, []);
@@ -756,11 +757,15 @@ const Index = () => {
                           const hoodCsv = (tevexHoodsCsv ?? []).find(h => h.modelo === m);
                           const hood = hoodCsv ?? TEVEX_HOODS.find(h => h.modelo === m);
                           if (!hood) return;
+                          // Q de referencia por filtros (1 filtro ~ 1000 m³/h)
+                          const qRef = typeof (hood as any).filtros === 'number' ? Math.round((hood as any).filtros) * 1000 : undefined;
+                          setQRefFiltros(qRef);
                           setData((d) => ({
                             ...d,
                             tipoCampana: hood.tipo ?? d.tipoCampana,
                             L: hood.anchoMm ? hood.anchoMm / 1000 : (hood.LdefaultM ?? d.L),
                             F: hood.fondoMm ? hood.fondoMm / 1000 : (hood.FdefaultM ?? d.F),
+                            caudalDiseno: qRef ?? d.caudalDiseno,
                           }));
                           // Autoselección de motor si el modelo incorpora motor o es Monoblock
                           const isMonoblock = /Monoblock/i.test(m);
