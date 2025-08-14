@@ -7,7 +7,7 @@ export interface TevexHoodCsvEntry {
   motor?: string; // si Monoblock y definido según ancho
 }
 
-function parseNumberLike(value: any): number | undefined {
+function parseNumberLike(value: unknown): number | undefined {
   if (value == null) return undefined;
   const s = String(value).replace(/[^0-9.,]/g, '').replace(',', '.');
   const n = parseFloat(s);
@@ -25,9 +25,19 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   let txt: string | null = null;
   for (const path of possibleNames) {
     try {
-      const res = await fetch(path);
+      // probar ruta tal cual
+      let res = await fetch(path);
+      if (!res.ok) {
+        // probar variante codificada si hay espacios
+        const encoded = encodeURI(path);
+        if (encoded !== path) {
+          res = await fetch(encoded);
+        }
+      }
       if (res.ok) { txt = await res.text(); break; }
-    } catch {}
+    } catch (e) {
+      console.debug('CSV fetch error', path, e);
+    }
   }
   if (!txt) return undefined;
   const lines = txt.split(/\r?\n/).filter(Boolean);
@@ -52,7 +62,7 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     const filtros = iFiltros >= 0 ? parseNumberLike(parts[iFiltros]) : undefined;
     const motor = iMotor >= 0 ? parts[iMotor] : undefined;
     if (!anchoMm || !fondoMm) continue;
-    out.push({ modelo, codigo, anchoMm, fondoMm, filtros: filtros ?? undefined, motor: motor?.length ? motor : undefined });
+    out.push({ modelo, codigo, anchoMm, fondoMm, filtros: filtros ?? undefined, motor: motor && motor.length ? motor : undefined });
   }
   return out;
 }
