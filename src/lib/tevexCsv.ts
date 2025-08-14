@@ -15,10 +15,12 @@ function parseNumberLike(value: unknown): number | undefined {
 }
 
 export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
+  '/TARIFA_TEVEX_2024.csv',
   '/TARIFA TEVEX 2024.csv',
   '/TEVEX_CAMPANAS.csv',
   '/campanas_tevex.csv',
   '/TARIFA TEVEX CAMPANAS.csv',
+  '/public/TARIFA_TEVEX_2024.csv',
   '/public/TARIFA TEVEX 2024.csv',
   '/public/TEVEX_CAMPANAS.csv',
 ]): Promise<TevexHoodCsvEntry[] | undefined> {
