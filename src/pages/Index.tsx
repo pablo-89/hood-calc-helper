@@ -17,6 +17,7 @@ import { validateInput } from "@/lib/validation";
 import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
 import { TEVEX_HOODS, TEVEX_FANS } from "@/data/tevex";
+import { loadTevexHoodsFromCsv, type TevexHoodCsvEntry } from "@/lib/tevexCsv";
 import { TEVEX_CAJAS } from "@/data/tevex";
 import { TEVEX_CURVES, normalizeCurveKey } from "@/data/tevexCurves";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
