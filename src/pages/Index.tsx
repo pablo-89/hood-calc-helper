@@ -772,32 +772,41 @@ const Index = () => {
                       <div>
                         <Label>Modelo TEVEX (opcional)</Label>
                         <Select value={tevexHoodSel ?? ""} onValueChange={(m) => {
-                          setTevexHoodSel(m);
-                          const hoodCsv = (tevexHoodsCsv ?? []).find(h => h.modelo === m);
-                          const hood = hoodCsv ?? TEVEX_HOODS.find(h => h.modelo === m);
-                          if (!hood) return;
-                          // Q de referencia por filtros (1 filtro ~ 1000 m³/h)
-                          const qRef = (hood as any)?.filtros && typeof (hood as any).filtros === 'number' ? Math.round((hood as any).filtros) * 1000 : undefined;
-                          setQRefFiltros(qRef);
-                          // seleccionar primer ancho/fondo disponibles del CSV si existen
-                          const anchoM = hood.anchoMm ? hood.anchoMm / 1000 : (csvAnchos[0] ? csvAnchos[0] / 1000 : (hood.LdefaultM ?? data.L));
-                          const fondoM = hood.fondoMm ? hood.fondoMm / 1000 : (csvFondos[0] ? csvFondos[0] / 1000 : (hood.FdefaultM ?? data.F));
-                          setData((d) => ({ ...d, tipoCampana: (hood as any).tipo ?? d.tipoCampana, L: anchoM, F: fondoM, caudalDiseno: qRef ?? d.caudalDiseno }));
-                          // Autoselección de motor si el modelo incorpora motor o es Monoblock
-                          const isMonoblock = /Monoblock/i.test(m);
-                          const isMonoblock400 = /400º\/?2H/i.test(m);
-                          if (isMonoblock) {
-                            // si hay motor en CSV para este ancho, mostrarlo; si no, usar Excel como fallback
-                            const csvEntry = csvEntriesForSel.find(e => Math.round((anchoM||0)*1000) === e.anchoMm);
-                            if (csvEntry?.motor) { setAutoMotorCsv(csvEntry.motor); setTevexMotorSel(csvEntry.motor); }
-                            else {
-                              import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
-                                selectMotorForMonoblockExcelAware(m, anchoM, fondoM, isMonoblock400).then(motor => { if (motor) { setAutoMotorCsv(motor); setTevexMotorSel(motor); } });
-                              });
+                                                      setTevexHoodSel(m);
+                            const entries = (tevexHoodsCsv ?? []).filter(h => h.modelo === m);
+                            const isCsv = entries.length > 0;
+                            const hood = isCsv ? undefined : TEVEX_HOODS.find(h => h.modelo === m);
+                            if (!isCsv && !hood) return;
+                            // construir listas desde el CSV si existen
+                            const widths = isCsv ? Array.from(new Set(entries.map(e => e.anchoMm))).sort((a,b)=>a-b) : [];
+                            const depths = isCsv ? Array.from(new Set(entries.map(e => e.fondoMm))).sort((a,b)=>a-b) : [];
+                            const anchoMM = isCsv ? (widths[0] ?? Math.round(((hood?.LdefaultM ?? data.L))*1000)) : Math.round(((hood!.LdefaultM ?? data.L))*1000);
+                            const fondoMM = isCsv ? (depths[0] ?? Math.round(((hood?.FdefaultM ?? data.F))*1000)) : Math.round(((hood!.FdefaultM ?? data.F))*1000);
+                            const anchoM = anchoMM / 1000;
+                            const fondoM = fondoMM / 1000;
+                            // Q de referencia por filtros (1 filtro ~ 1000 m³/h)
+                            let qRef: number | undefined = undefined;
+                            if (isCsv) {
+                              const match = entries.find(e => e.anchoMm === anchoMM && e.fondoMm === fondoMM) || entries[0];
+                              if (match?.filtros) qRef = Math.round(match.filtros) * 1000;
                             }
-                          } else if (hood.motorIncluidoModelo) {
-                            setTevexMotorSel(hood.motorIncluidoModelo);
-                          }
+                            setQRefFiltros(qRef);
+                            setData((d) => ({ ...d, tipoCampana: (hood as any)?.tipo ?? d.tipoCampana, L: anchoM, F: fondoM, caudalDiseno: qRef ?? d.caudalDiseno }));
+                            // Autoselección de motor si el modelo incorpora motor o es Monoblock
+                            const isMonoblock = /Monoblock/i.test(m);
+                            const isMonoblock400 = /400º\/?2H/i.test(m);
+                            if (isMonoblock) {
+                              // si hay motor en CSV para este ancho, mostrarlo; si no, usar Excel como fallback
+                              const csvMatch = isCsv ? (entries.find(e => e.anchoMm === anchoMM && e.fondoMm === fondoMM) || entries.find(e => e.anchoMm === anchoMM)) : undefined;
+                              if (csvMatch?.motor) { setAutoMotorCsv(csvMatch.motor); setTevexMotorSel(csvMatch.motor); }
+                              else {
+                                import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
+                                  selectMotorForMonoblockExcelAware(m, anchoM, fondoM, isMonoblock400).then(motor => { if (motor) { setAutoMotorCsv(motor); setTevexMotorSel(motor); } });
+                                });
+                              }
+                            } else if (hood && (hood as any).motorIncluidoModelo) {
+                              setTevexMotorSel((hood as any).motorIncluidoModelo);
+                            }
                         }}>
                           <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
                           <SelectContent>
