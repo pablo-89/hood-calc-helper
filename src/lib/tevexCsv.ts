@@ -47,16 +47,16 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const header = lines.shift()!;
   const cols = header.split(/[,;\t]/).map(s => s.trim().toLowerCase());
   const idx = (nameRe: RegExp) => cols.findIndex(c => nameRe.test(c));
-  const iModelo = idx(/modelo/);
-  const iCodigo = idx(/cod|ref/);
-  const iAncho = idx(/ancho|largo|width/);
-  const iFondo = idx(/fondo|profundidad|depth/);
-  const iFiltros = idx(/filtro/);
-  const iMotor = idx(/motor|ventilador/);
+  const iModelo = idx(/^(modelo|campana|nombre)/);
+  const iCodigo = idx(/^(cod|ref)/);
+  const iAncho = idx(/^(ancho|largo|width)/);
+  const iFondo = idx(/^(fondo|profundidad|depth)/);
+  const iFiltros = idx(/^(filtro|filtros|n\s*filtros|num.*filtro)/);
+  const iMotor = idx(/^(motor|ventilador)/);
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
     const parts = line.split(/[,;\t]/).map(s => s.trim());
-    const modelo = iModelo >= 0 ? parts[iModelo] : '';
+    const modelo = iModelo >= 0 ? parts[iModelo] : (parts[0] || '');
     if (!modelo) continue;
     const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
     const anchoMm = iAncho >= 0 ? parseNumberLike(parts[iAncho]) : undefined;
