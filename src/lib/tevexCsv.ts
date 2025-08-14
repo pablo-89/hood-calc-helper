@@ -4,7 +4,8 @@ export interface TevexHoodCsvEntry {
   anchoMm: number;
   fondoMm: number;
   filtros?: number;
-  motor?: string; // si Monoblock y definido según ancho
+  motor?: string;
+  referencia?: string;
 }
 
 function stripDiacritics(s: string): string {
@@ -16,6 +17,17 @@ function parseNumberLike(value: unknown): number | undefined {
   const s = String(value).replace(/[^0-9.,]/g, '').replace(',', '.');
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function extractFondoYReferencia(raw: unknown): { fondoMm?: number; referencia?: string } {
+  if (raw == null) return {};
+  const s = String(raw).trim();
+  if (!s) return {};
+  const numMatch = s.match(/(\d{2,4})/); // primera cifra (mm)
+  const fondoMm = numMatch ? parseInt(numMatch[1], 10) : undefined;
+  // referencia: quitar el número y separadores obvios
+  const referencia = s.replace(numMatch ? numMatch[1] : '', '').replace(/[:\-–•]/g, '').trim();
+  return { fondoMm, referencia: referencia || undefined };
 }
 
 export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
@@ -50,7 +62,6 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const rawCols = header.split(/[,;\t]/).map(s => s.trim());
   const cols = rawCols.map(c => stripDiacritics(c.toLowerCase()));
   const findIdx = (pred: (c: string) => boolean) => cols.findIndex(pred);
-  const contains = (frag: string) => (c: string) => c.includes(frag);
   const iModelo = findIdx(c => c.includes('modelo') || c.includes('campana') || c.includes('nombre'));
   const iCodigo = findIdx(c => c.includes('cod') || c.includes('ref'));
   const iAncho = findIdx(c => c.includes('ancho') || c.includes('largo') || c.includes('width'));
@@ -61,15 +72,41 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
     const parts = line.split(/[,;\t]/).map(s => s.trim());
-    const modelo = iModelo >= 0 ? parts[iModelo] : (parts[0] || '');
-    if (!modelo) continue;
+
+    // Fallback por posiciones (A,B,C,D,E,F,I,J,M,N,Q,R) si faltan cabeceras
+    const modeloPos = parts[0] || undefined; // A
+    const motorPos = parts[1] || undefined; // B
+    const anchoPos = parts[2] || undefined; // C
+    const filtrosPos = parts[3] || undefined; // D
+    const fondoRef1 = parts[4] || undefined; // E
+    const precio1 = parts[5] || undefined; // F (no usado)
+    const fondoRef2 = parts[8] || undefined; // I
+    const precio2 = parts[9] || undefined; // J (no usado)
+    const fondoRef3 = parts[12] || undefined; // M
+    const precio3 = parts[13] || undefined; // N (no usado)
+    const fondoRef4 = parts[16] || undefined; // Q
+    const precio4 = parts[17] || undefined; // R (no usado)
+
+    const modeloVal = iModelo >= 0 ? (parts[iModelo] || modeloPos) : (modeloPos || parts[0] || '');
+    if (!modeloVal) continue;
+
+    const anchoMm = iAncho >= 0 ? (parseNumberLike(parts[iAncho]) ?? parseNumberLike(anchoPos)) : (parseNumberLike(anchoPos));
+    const filtros = iFiltros >= 0 ? (parseNumberLike(parts[iFiltros]) ?? parseNumberLike(filtrosPos)) : parseNumberLike(filtrosPos);
     const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
-    const anchoMm = iAncho >= 0 ? parseNumberLike(parts[iAncho]) : undefined;
-    const fondoMm = iFondo >= 0 ? parseNumberLike(parts[iFondo]) : undefined;
-    const filtros = iFiltros >= 0 ? parseNumberLike(parts[iFiltros]) : undefined;
-    const motor = iMotor >= 0 ? parts[iMotor] : undefined;
-    if (!anchoMm || !fondoMm) continue;
-    out.push({ modelo, codigo, anchoMm, fondoMm, filtros: filtros ?? undefined, motor: motor && motor.length ? motor : undefined });
+    const motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
+
+    // Fondos: cabecera estándar o múltiples por posiciones
+    if (iFondo >= 0) {
+      const fondoMm = parseNumberLike(parts[iFondo]);
+      if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor });
+    } else {
+      // intentar extraer de los grupos E/I/M/Q
+      const groups = [fondoRef1, fondoRef2, fondoRef3, fondoRef4].filter(Boolean);
+      for (const g of groups) {
+        const { fondoMm, referencia } = extractFondoYReferencia(g);
+        if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, referencia });
+      }
+    }
   }
   return out;
 }
