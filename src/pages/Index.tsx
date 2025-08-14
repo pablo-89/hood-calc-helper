@@ -127,7 +127,16 @@ const Index = () => {
   }, [csvEntriesForSel]);
   const [autoMotorCsv, setAutoMotorCsv] = useState<string | undefined>(undefined);
   useEffect(() => {
-    loadTevexHoodsFromCsv().then(setTevexHoodsCsv).catch(() => {});
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await loadTevexHoodsFromCsv();
+        if (!cancelled) setTevexHoodsCsv(rows ?? []);
+      } catch {
+        if (!cancelled) setTevexHoodsCsv([]);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Persistencia en localStorage
