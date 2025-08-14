@@ -7,6 +7,10 @@ export interface TevexHoodCsvEntry {
   motor?: string; // si Monoblock y definido según ancho
 }
 
+function stripDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+
 function parseNumberLike(value: unknown): number | undefined {
   if (value == null) return undefined;
   const s = String(value).replace(/[^0-9.,]/g, '').replace(',', '.');
@@ -27,10 +31,8 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   let txt: string | null = null;
   for (const path of possibleNames) {
     try {
-      // probar ruta tal cual
       let res = await fetch(path);
       if (!res.ok) {
-        // probar variante codificada si hay espacios
         const encoded = encodeURI(path);
         if (encoded !== path) {
           res = await fetch(encoded);
@@ -45,14 +47,17 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const lines = txt.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) return [];
   const header = lines.shift()!;
-  const cols = header.split(/[,;\t]/).map(s => s.trim().toLowerCase());
-  const idx = (nameRe: RegExp) => cols.findIndex(c => nameRe.test(c));
-  const iModelo = idx(/^(modelo|campana|nombre)/);
-  const iCodigo = idx(/^(cod|ref)/);
-  const iAncho = idx(/^(ancho|largo|width)/);
-  const iFondo = idx(/^(fondo|profundidad|depth)/);
-  const iFiltros = idx(/^(filtro|filtros|n\s*filtros|num.*filtro)/);
-  const iMotor = idx(/^(motor|ventilador)/);
+  const rawCols = header.split(/[,;\t]/).map(s => s.trim());
+  const cols = rawCols.map(c => stripDiacritics(c.toLowerCase()));
+  const findIdx = (pred: (c: string) => boolean) => cols.findIndex(pred);
+  const contains = (frag: string) => (c: string) => c.includes(frag);
+  const iModelo = findIdx(c => c.includes('modelo') || c.includes('campana') || c.includes('nombre'));
+  const iCodigo = findIdx(c => c.includes('cod') || c.includes('ref'));
+  const iAncho = findIdx(c => c.includes('ancho') || c.includes('largo') || c.includes('width'));
+  const iFondo = findIdx(c => c.includes('fondo') || c.includes('profund') || c.includes('depth'));
+  const iFiltros = findIdx(c => c.includes('filtro'));
+  const iMotor = findIdx(c => c.includes('motor') || c.includes('ventilador'));
+
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
     const parts = line.split(/[,;\t]/).map(s => s.trim());
