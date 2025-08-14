@@ -7,7 +7,6 @@ export interface TevexExcelRow {
 }
 
 export interface TevexExcelMapping {
-  // key: normalized model name (upper), values by fondo and threshold largo
   models: Record<string, Array<{ fondoMm: number; maxLargoMm: number; motor: string }>>;
 }
 
@@ -24,15 +23,17 @@ export async function loadTevexExcelMapping(possibleNames: string[] = [
     try {
       const res = await fetch(path);
       if (res.ok) { buf = await res.arrayBuffer(); break; }
-    } catch {}
+    } catch (e) {
+      console.debug("Excel fetch error", e);
+    }
   }
   if (!buf) return undefined;
 
-  let XLSX: any;
+  let XLSX: typeof import("xlsx");
   try {
-    // dynamic import to avoid bundling if not used
     XLSX = await import("xlsx");
-  } catch {
+  } catch (e) {
+    console.debug("xlsx import failed", e);
     return undefined;
   }
   try {
@@ -40,9 +41,8 @@ export async function loadTevexExcelMapping(possibleNames: string[] = [
     const mapping: TevexExcelMapping = { models: {} };
     for (const sheetName of wb.SheetNames) {
       const ws = wb.Sheets[sheetName];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null });
+      const rows: Array<Record<string, unknown>> = XLSX.utils.sheet_to_json(ws, { defval: null });
       if (!Array.isArray(rows) || rows.length === 0) continue;
-      // Try to find column names
       const header = Object.keys(rows[0]).map(String);
       const findKey = (needle: RegExp) => header.find(h => needle.test(h.toString().toLowerCase()));
       const kModelo = findKey(/modelo/);
@@ -62,12 +62,12 @@ export async function loadTevexExcelMapping(possibleNames: string[] = [
         mapping.models[key].push({ fondoMm: Number.isFinite(fondoMm) ? fondoMm : NaN, maxLargoMm: Number.isFinite(largoMm) ? largoMm : NaN, motor: ventilador });
       }
     }
-    // sort by fondo then maxLargo
     for (const k of Object.keys(mapping.models)) {
       mapping.models[k].sort((a, b) => (a.fondoMm - b.fondoMm) || (a.maxLargoMm - b.maxLargoMm));
     }
     return mapping;
-  } catch {
+  } catch (e) {
+    console.debug("xlsx parse failed", e);
     return undefined;
   }
 }
