@@ -105,6 +105,10 @@ const Index = () => {
   const [curveVersion, setCurveVersion] = useState(0);
   const [compararCaja, setCompararCaja] = useState(false);
   const [tevexCajaExtraSel, setTevexCajaExtraSel] = useState<string | undefined>(undefined);
+  const [tevexHoodsCsv, setTevexHoodsCsv] = useState<TevexHoodCsvEntry[] | undefined>(undefined);
+  useEffect(() => {
+    loadTevexHoodsFromCsv().then(setTevexHoodsCsv).catch(() => {});
+  }, []);
 
   // Persistencia en localStorage
   const STORAGE_KEY = "hood_calc_prefs_v1";
@@ -749,13 +753,14 @@ const Index = () => {
                         <Label>Modelo TEVEX (opcional)</Label>
                         <Select value={tevexHoodSel ?? ""} onValueChange={(m) => {
                           setTevexHoodSel(m);
-                          const hood = TEVEX_HOODS.find(h => h.modelo === m);
+                          const hoodCsv = (tevexHoodsCsv ?? []).find(h => h.modelo === m);
+                          const hood = hoodCsv ?? TEVEX_HOODS.find(h => h.modelo === m);
                           if (!hood) return;
                           setData((d) => ({
                             ...d,
-                            tipoCampana: hood.tipo,
-                            L: hood.LdefaultM,
-                            F: hood.FdefaultM,
+                            tipoCampana: hood.tipo ?? d.tipoCampana,
+                            L: hood.anchoMm ? hood.anchoMm / 1000 : (hood.LdefaultM ?? d.L),
+                            F: hood.fondoMm ? hood.fondoMm / 1000 : (hood.FdefaultM ?? d.F),
                           }));
                           // Autoselección de motor si el modelo incorpora motor o es Monoblock
                           const isMonoblock = /Monoblock/i.test(m);
@@ -772,7 +777,7 @@ const Index = () => {
                         }}>
                           <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
                           <SelectContent>
-                            {TEVEX_HOODS.map(h => (
+                            {(tevexHoodsCsv ?? TEVEX_HOODS).map((h: any) => (
                               <SelectItem key={h.modelo} value={h.modelo}>{h.modelo}</SelectItem>
                             ))}
                           </SelectContent>
