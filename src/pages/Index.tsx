@@ -107,6 +107,25 @@ const Index = () => {
   const [tevexCajaExtraSel, setTevexCajaExtraSel] = useState<string | undefined>(undefined);
   const [tevexHoodsCsv, setTevexHoodsCsv] = useState<TevexHoodCsvEntry[] | undefined>(undefined);
   const [qRefFiltros, setQRefFiltros] = useState<number | undefined>(undefined);
+  const csvModelNames = useMemo(() => {
+    if (!tevexHoodsCsv) return undefined;
+    const set = new Set<string>();
+    tevexHoodsCsv.forEach(e => set.add(e.modelo));
+    return Array.from(set.values());
+  }, [tevexHoodsCsv]);
+  const csvEntriesForSel = useMemo(() => {
+    if (!tevexHoodSel || !tevexHoodsCsv) return [] as TevexHoodCsvEntry[];
+    return tevexHoodsCsv.filter(e => e.modelo === tevexHoodSel);
+  }, [tevexHoodSel, tevexHoodsCsv]);
+  const csvAnchos = useMemo(() => {
+    const mm = Array.from(new Set(csvEntriesForSel.map(e => e.anchoMm))).sort((a,b)=>a-b);
+    return mm;
+  }, [csvEntriesForSel]);
+  const csvFondos = useMemo(() => {
+    const mm = Array.from(new Set(csvEntriesForSel.map(e => e.fondoMm))).sort((a,b)=>a-b);
+    return mm;
+  }, [csvEntriesForSel]);
+  const [autoMotorCsv, setAutoMotorCsv] = useState<string | undefined>(undefined);
   useEffect(() => {
     loadTevexHoodsFromCsv().then(setTevexHoodsCsv).catch(() => {});
   }, []);
@@ -758,35 +777,38 @@ const Index = () => {
                           const hood = hoodCsv ?? TEVEX_HOODS.find(h => h.modelo === m);
                           if (!hood) return;
                           // Q de referencia por filtros (1 filtro ~ 1000 m³/h)
-                          const qRef = typeof (hood as any).filtros === 'number' ? Math.round((hood as any).filtros) * 1000 : undefined;
+                          const qRef = (hood as any)?.filtros && typeof (hood as any).filtros === 'number' ? Math.round((hood as any).filtros) * 1000 : undefined;
                           setQRefFiltros(qRef);
-                          setData((d) => ({
-                            ...d,
-                            tipoCampana: hood.tipo ?? d.tipoCampana,
-                            L: hood.anchoMm ? hood.anchoMm / 1000 : (hood.LdefaultM ?? d.L),
-                            F: hood.fondoMm ? hood.fondoMm / 1000 : (hood.FdefaultM ?? d.F),
-                            caudalDiseno: qRef ?? d.caudalDiseno,
-                          }));
+                          // seleccionar primer ancho/fondo disponibles del CSV si existen
+                          const anchoM = hood.anchoMm ? hood.anchoMm / 1000 : (csvAnchos[0] ? csvAnchos[0] / 1000 : (hood.LdefaultM ?? data.L));
+                          const fondoM = hood.fondoMm ? hood.fondoMm / 1000 : (csvFondos[0] ? csvFondos[0] / 1000 : (hood.FdefaultM ?? data.F));
+                          setData((d) => ({ ...d, tipoCampana: (hood as any).tipo ?? d.tipoCampana, L: anchoM, F: fondoM, caudalDiseno: qRef ?? d.caudalDiseno }));
                           // Autoselección de motor si el modelo incorpora motor o es Monoblock
                           const isMonoblock = /Monoblock/i.test(m);
                           const isMonoblock400 = /400º\/?2H/i.test(m);
                           if (isMonoblock) {
-                            import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
-                              selectMotorForMonoblockExcelAware(m, hood.LdefaultM, hood.FdefaultM, isMonoblock400).then(motor => {
-                                if (motor) setTevexMotorSel(motor);
+                            // si hay motor en CSV para este ancho, mostrarlo; si no, usar Excel como fallback
+                            const csvEntry = csvEntriesForSel.find(e => Math.round((anchoM||0)*1000) === e.anchoMm);
+                            if (csvEntry?.motor) { setAutoMotorCsv(csvEntry.motor); setTevexMotorSel(csvEntry.motor); }
+                            else {
+                              import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
+                                selectMotorForMonoblockExcelAware(m, anchoM, fondoM, isMonoblock400).then(motor => { if (motor) { setAutoMotorCsv(motor); setTevexMotorSel(motor); } });
                               });
-                            });
+                            }
                           } else if (hood.motorIncluidoModelo) {
                             setTevexMotorSel(hood.motorIncluidoModelo);
                           }
                         }}>
                           <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
                           <SelectContent>
-                            {(tevexHoodsCsv ?? TEVEX_HOODS).map((h: any) => (
-                              <SelectItem key={h.modelo} value={h.modelo}>{h.modelo}</SelectItem>
+                            {(csvModelNames ?? TEVEX_HOODS.map(h=>h.modelo)).map((name: string) => (
+                              <SelectItem key={name} value={name}>{name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        {autoMotorCsv && /Monoblock/i.test(tevexHoodSel || '') ? (
+                          <div className="text-xs text-muted-foreground mt-1">Motor (auto por ancho): {autoMotorCsv}</div>
+                        ) : null}
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
@@ -1289,7 +1311,24 @@ const Index = () => {
                 {fanChartModel && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
-                    {/* Comparador antiguo de FANS eliminado; usar comparador de Cajas TEVEX arriba */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={compararCaja} onCheckedChange={setCompararCaja} />
+                        <span className="text-sm">Comparar caja</span>
+                      </div>
+                      {compararCaja && (
+                        <div>
+                          <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)}>
+                            <SelectTrigger><SelectValue placeholder="Caja a comparar" /></SelectTrigger>
+                            <SelectContent>
+                              {TEVEX_CAJAS.map(c => (
+                                <SelectItem key={`cmp-${c.modelo}`} value={c.modelo}>{c.modelo}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
                     <FanCurveChart
                       mainCurve={interpCurve.map(p => ({ q: p.q, dp: p.dp }))}
                       extraCurve={compararCaja ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
