@@ -48,6 +48,9 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   '/public/TARIFA_TEVEX_2024.csv',
   '/public/TARIFA TEVEX 2024.csv',
   '/public/TEVEX_CAMPANAS.csv',
+  // Remote raw fallbacks
+  'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP-CLEAN.csv',
+  'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP.csv',
 ]): Promise<TevexHoodCsvEntry[] | undefined> {
   let txt: string | null = null;
   for (const path of possibleNames) {
