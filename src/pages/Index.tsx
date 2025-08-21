@@ -373,7 +373,7 @@ const Index = () => {
     const min = Math.min(...qs, Math.round(results.Q));
     const max = Math.max(...qs, Math.round(results.Q));
     return generateTicks(min, max, 5);
-  }, [fanChartModel, fanChartModelExtra, results.Q]);
+  }, [fanChartModel, results.Q]);
 
   const dpTicks = useMemo(() => {
     const dps = [
@@ -383,7 +383,7 @@ const Index = () => {
     const min = 0;
     const max = Math.max(...dps, Math.round(results.deltaPtotal));
     return generateTicks(min, max, 5);
-  }, [fanChartModel, fanChartModelExtra, results.deltaPtotal]);
+  }, [fanChartModel, results.deltaPtotal]);
 
   const interpCurve = useMemo(() => {
     const c = fanChartModel?.curva;
@@ -871,22 +871,7 @@ const Index = () => {
                         {motorOptions.length === 0 && (
                           <div className="text-xs text-muted-foreground mt-1">Sin datos de motores en CSV. Verifique que BSD-CAMP-CLEAN.csv esté accesible.</div>
                         )}
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div className="flex items-center gap-2">
-                            <Switch checked={compararCaja} onCheckedChange={setCompararCaja} />
-                            <span className="text-sm">Comparar caja</span>
-                          </div>
-                          {compararCaja && (
-                            <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)} disabled={motorOptions.length === 0}>
-                              <SelectTrigger><SelectValue placeholder="Caja a comparar" /></SelectTrigger>
-                              <SelectContent>
-                                {motorOptions.map(name => (
-                                  <SelectItem key={`cmp-${name}`} value={name}>{name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
+                        {/* Comparar caja eliminado */}
                       </div>
                     </div>
                   </div>
