@@ -863,17 +863,10 @@ const Index = () => {
                             // Ajustar tipo campana por heurística si procede
                             const tipoHeur = /central/i.test(m) ? "central" : /mural|pared/i.test(m) ? "mural" : undefined;
                             if (isCsv) {
-                              // fijar L/F al mejor match del CSV para el modelo
-                              const best = (() => {
-                                const Lmm = Math.round((data.L || 0) * 1000);
-                                const Fmm = Math.round((data.F || 0) * 1000);
-                                const scored = entries.map(e => ({ e, score: Math.abs(e.anchoMm - Lmm) + Math.abs(e.fondoMm - Fmm) }));
-                                scored.sort((a,b)=>a.score - b.score);
-                                return scored[0]?.e || entries[0];
-                              })();
-                              if (best) {
-                                setData((d) => ({ ...d, L: best.anchoMm / 1000, F: best.fondoMm / 1000, tipoCampana: (tipoHeur as any) ?? d.tipoCampana }));
-                              }
+                              // fijar L/F a la primera combinación válida del CSV
+                              const sorted = [...entries].sort((a,b)=> (a.fondoMm - b.fondoMm) || (a.anchoMm - b.anchoMm));
+                              const first = sorted[0];
+                              if (first) setData((d) => ({ ...d, L: first.anchoMm / 1000, F: first.fondoMm / 1000, tipoCampana: (tipoHeur as any) ?? d.tipoCampana }));
                             } else {
                               const hood = TEVEX_HOODS.find(h => h.modelo === m);
                               if (hood) setData((d) => ({ ...d, L: hood.LdefaultM, F: hood.FdefaultM, tipoCampana: hood.tipo }));
@@ -936,7 +929,7 @@ const Index = () => {
                       </Select>
                     </div>
                     <div>
-                      <Label>Fondo (m)</Label>
+                      <Label>Fondo (cm)</Label>
                       {tevexHoodSel && csvEntriesForSel.length > 0 ? (
                         <Select
                           value={String(Math.round(data.F * 1000) || "")}
@@ -950,21 +943,21 @@ const Index = () => {
                             setData((d) => ({ ...d, F: m, L: (nuevoAnchoMm || 0) / 1000 }));
                           }}
                         >
-                          <SelectTrigger><SelectValue placeholder="Selecciona fondo" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder="Selecciona fondo (cm)" /></SelectTrigger>
                           <SelectContent>
                             {csvFondos.map((mm) => (
-                              <SelectItem key={`fondo-${mm}`} value={String(mm)}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
+                              <SelectItem key={`fondo-${mm}`} value={String(mm)}>{`${(mm/10).toFixed(0)} cm`}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Input type="number" step="0.01" value={data.F}
-                          onChange={(e) => onChange("F", parseFloat(e.target.value) || 0)} />
+                        <Input type="number" step="1" value={Math.round((data.F||0)*100)}
+                          onChange={(e) => onChange("F", (parseFloat(e.target.value) || 0) / 100)} />
                       )}
                       {validation.fieldErrors.F && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.F}</p>}
                     </div>
                     <div>
-                      <Label>Ancho (m)</Label>
+                      <Label>Ancho (cm)</Label>
                       {tevexHoodSel && csvEntriesForSel.length > 0 ? (
                         <Select
                           value={String(Math.round(data.L * 1000) || "")}
@@ -974,19 +967,19 @@ const Index = () => {
                             setData((d) => ({ ...d, L: m }));
                           }}
                         >
-                          <SelectTrigger><SelectValue placeholder="Selecciona ancho" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder="Selecciona ancho (cm)" /></SelectTrigger>
                           <SelectContent>
                             {csvAnchosForFondo.map((mm) => {
                               const disabled = !csvEntriesForSel.some(e => e.fondoMm === Math.round((data.F||0)*1000) && e.anchoMm === mm);
                               return (
-                                <SelectItem key={`ancho-${mm}`} value={String(mm)} disabled={disabled}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
+                                <SelectItem key={`ancho-${mm}`} value={String(mm)} disabled={disabled}>{`${(mm/10).toFixed(0)} cm`}</SelectItem>
                               );
                             })}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Input type="number" step="0.01" value={data.L}
-                          onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
+                        <Input type="number" step="1" value={Math.round((data.L||0)*100)}
+                          onChange={(e) => onChange("L", (parseFloat(e.target.value) || 0) / 100)} />
                       )}
                       {validation.fieldErrors.L && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.L}</p>}
                     </div>
