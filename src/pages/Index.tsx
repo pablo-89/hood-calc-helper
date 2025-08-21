@@ -124,6 +124,15 @@ const Index = () => {
     const mm = Array.from(new Set(csvEntriesForSel.map(e => e.fondoMm))).sort((a,b)=>a-b);
     return mm;
   }, [csvEntriesForSel]);
+  const selectedAnchoMm = useMemo(() => Math.round((data.L || 0) * 1000), [data.L]);
+  const selectedFondoMm = useMemo(() => Math.round((data.F || 0) * 1000), [data.F]);
+  const csvAnchosForFondo = useMemo(() => {
+    if (!csvEntriesForSel || csvEntriesForSel.length === 0) return [] as number[];
+    const mm = Array.from(new Set(csvEntriesForSel
+      .filter(e => e.fondoMm === selectedFondoMm)
+      .map(e => e.anchoMm))).sort((a,b)=>a-b);
+    return mm;
+  }, [csvEntriesForSel, selectedFondoMm]);
   const [autoMotorCsv, setAutoMotorCsv] = useState<string | undefined>(undefined);
   const uniqueCsvMotors = useMemo(() => {
     if (!tevexHoodsCsv) return [] as string[];
@@ -137,13 +146,14 @@ const Index = () => {
   }, [csvModelNames]);
 
   const motorOptions = useMemo(() => {
-    // Preferir motores del modelo seleccionado; si no hay modelo, lista vacía
     if (!tevexHoodSel) return [] as string[];
-    const entries = csvEntriesForSel;
+    const entries = csvEntriesForSel.filter(e => (
+      (!selectedFondoMm || e.fondoMm === selectedFondoMm) &&
+      (!selectedAnchoMm || e.anchoMm === selectedAnchoMm)
+    ));
     const vals = entries.map(e => (e.motor || '').trim()).filter(Boolean);
-    const perModel = Array.from(new Set(vals)).sort();
-    return perModel;
-  }, [tevexHoodSel, csvEntriesForSel]);
+    return Array.from(new Set(vals)).sort();
+  }, [tevexHoodSel, csvEntriesForSel, selectedFondoMm, selectedAnchoMm]);
 
   const selectedCsvBestMatch = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv || !Number.isFinite(data.L) || !Number.isFinite(data.F)) return undefined as TevexHoodCsvEntry | undefined;
@@ -151,6 +161,8 @@ const Index = () => {
     if (entries.length === 0) return undefined;
     const Lmm = Math.round((data.L || 0) * 1000);
     const Fmm = Math.round((data.F || 0) * 1000);
+    const exact = entries.find(e => e.anchoMm === Lmm && e.fondoMm === Fmm);
+    if (exact) return exact;
     const scored = entries.map(e => ({ e, score: Math.abs(e.anchoMm - Lmm) + Math.abs(e.fondoMm - Fmm) }));
     scored.sort((a,b)=>a.score - b.score);
     return scored[0]?.e;
@@ -900,30 +912,6 @@ const Index = () => {
                       </Select>
                     </div>
                     <div>
-                      <Label>Ancho (m)</Label>
-                      {tevexHoodSel && csvEntriesForSel.length > 0 ? (
-                        <Select
-                          value={String(Math.round(data.L * 1000) || "")}
-                          onValueChange={(mmStr) => {
-                            const mm = parseInt(mmStr, 10);
-                            const m = (mm || 0) / 1000;
-                            setData((d) => ({ ...d, L: m }));
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Selecciona ancho" /></SelectTrigger>
-                          <SelectContent>
-                            {csvAnchos.map((mm) => (
-                              <SelectItem key={`ancho-${mm}`} value={String(mm)}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input type="number" step="0.01" value={data.L}
-                          onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
-                      )}
-                      {validation.fieldErrors.L && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.L}</p>}
-                    </div>
-                    <div>
                       <Label>Fondo (m)</Label>
                       {tevexHoodSel && csvEntriesForSel.length > 0 ? (
                         <Select
@@ -931,7 +919,11 @@ const Index = () => {
                           onValueChange={(mmStr) => {
                             const mm = parseInt(mmStr, 10);
                             const m = (mm || 0) / 1000;
-                            setData((d) => ({ ...d, F: m }));
+                            // al cambiar fondo, si el ancho actual no es válido para este fondo, ajustarlo al primero válido
+                            const validAnchos = csvEntriesForSel.filter(e => e.fondoMm === mm).map(e => e.anchoMm);
+                            const anchoActualMm = Math.round((data.L || 0) * 1000);
+                            const nuevoAnchoMm = validAnchos.includes(anchoActualMm) ? anchoActualMm : (validAnchos.sort((a,b)=>a-b)[0] ?? anchoActualMm);
+                            setData((d) => ({ ...d, F: m, L: (nuevoAnchoMm || 0) / 1000 }));
                           }}
                         >
                           <SelectTrigger><SelectValue placeholder="Selecciona fondo" /></SelectTrigger>
@@ -946,6 +938,30 @@ const Index = () => {
                           onChange={(e) => onChange("F", parseFloat(e.target.value) || 0)} />
                       )}
                       {validation.fieldErrors.F && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.F}</p>}
+                    </div>
+                    <div>
+                      <Label>Ancho (m)</Label>
+                      {tevexHoodSel && csvEntriesForSel.length > 0 ? (
+                        <Select
+                          value={String(Math.round(data.L * 1000) || "")}
+                          onValueChange={(mmStr) => {
+                            const mm = parseInt(mmStr, 10);
+                            const m = (mm || 0) / 1000;
+                            setData((d) => ({ ...d, L: m }));
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecciona ancho" /></SelectTrigger>
+                          <SelectContent>
+                            {csvAnchosForFondo.map((mm) => (
+                              <SelectItem key={`ancho-${mm}`} value={String(mm)}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input type="number" step="0.01" value={data.L}
+                          onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
+                      )}
+                      {validation.fieldErrors.L && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.L}</p>}
                     </div>
                     <div>
                       <TooltipProvider>
