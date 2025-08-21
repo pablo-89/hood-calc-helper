@@ -108,15 +108,35 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     const fondoRef4 = parts[16] || undefined; // Q
     const precio4 = parts[17] || undefined; // R (no usado)
 
-    const modeloVal = iModelo >= 0 ? (parts[iModelo] || modeloPos) : (modeloPos || parts[0] || '');
+    let modeloVal = iModelo >= 0 ? (parts[iModelo] || modeloPos) : (modeloPos || parts[0] || '');
     if (!modeloVal) continue;
 
-    const anchoMm = iAncho >= 0 ? (parseNumberLike(parts[iAncho]) ?? parseNumberLike(anchoPos)) : (parseNumberLike(anchoPos));
+    let anchoMm = iAncho >= 0 ? (parseNumberLike(parts[iAncho]) ?? parseNumberLike(anchoPos)) : (parseNumberLike(anchoPos));
     const filtros = iFiltros >= 0 ? (parseNumberLike(parts[iFiltros]) ?? parseNumberLike(filtrosPos)) : parseNumberLike(filtrosPos);
     const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
     const motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
 
-    // Fondos y M3/H: soportar múltiples grupos por fila
+    // Fallback para CSV fijo por espacios: detectar números de la línea
+    if (!anchoMm || allFondoIdxs.length === 0) {
+      const nums = line.match(/\d{3,5}/g) || [];
+      if (nums.length >= 4) {
+        const anchoToken = parseInt(nums[0], 10);
+        if (Number.isFinite(anchoToken)) anchoMm = anchoToken;
+        const modelText = line.split(String(anchoToken))[0]?.trim();
+        if (modelText) modeloVal = modelText.replace(/\s+/g, ' ').trim();
+        for (let i = 1; i + 2 < nums.length; i += 3) {
+          const nf = parseInt(nums[i], 10);
+          const m3 = parseInt(nums[i + 1], 10);
+          const fondo = parseInt(nums[i + 2], 10);
+          if (Number.isFinite(anchoMm) && Number.isFinite(fondo)) {
+            out.push({ modelo: modeloVal, codigo, anchoMm: anchoMm!, fondoMm: fondo, filtros: Number.isFinite(nf) ? nf : undefined, motor, m3h: Number.isFinite(m3) ? m3 : undefined });
+          }
+        }
+        continue;
+      }
+    }
+
+    // Fondos y M3/H: soportar múltiples grupos por fila (con cabeceras)
     if (allFondoIdxs.length > 0) {
       // M3/H por fila (asociado al ANCHO). Tomar primer M3/H numérico de la fila
       let rowM3h: number | undefined = undefined;
