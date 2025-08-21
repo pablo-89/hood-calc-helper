@@ -26,6 +26,22 @@ import { FanCurveChart } from "@/components/FanCurveChart";
 const formato = (n: number, dec = 2) =>
   new Intl.NumberFormat("es-ES", { maximumFractionDigits: dec }).format(n);
 
+// Normaliza nombres de modelo para comparar CSV vs selección (quita tildes y caracteres raros)
+const normalizeName = (s: string | undefined) => {
+  if (!s) return "";
+  try {
+    return s
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9/ ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  } catch {
+    return String(s).toUpperCase().replace(/\s+/g, ' ').trim();
+  }
+};
+
 const helperText = {
   vap: "Valores típicos industriales: 0,25–0,50 m/s según campana y duty.",
   vd: "7–12 m/s recomendado en extracción de grasas; ajustar por ruido.",
@@ -108,13 +124,17 @@ const Index = () => {
   const [qRefM3h, setQRefM3h] = useState<number | undefined>(undefined);
   const csvModelNames = useMemo(() => {
     if (!tevexHoodsCsv) return undefined;
-    const set = new Set<string>();
-    tevexHoodsCsv.forEach(e => set.add(e.modelo));
-    return Array.from(set.values());
+    const normToDisplay = new Map<string, string>();
+    for (const e of tevexHoodsCsv) {
+      const k = normalizeName(e.modelo);
+      if (!normToDisplay.has(k)) normToDisplay.set(k, e.modelo);
+    }
+    return Array.from(normToDisplay.values());
   }, [tevexHoodsCsv]);
   const csvEntriesForSel = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv) return [] as TevexHoodCsvEntry[];
-    return tevexHoodsCsv.filter(e => e.modelo === tevexHoodSel);
+    const key = normalizeName(tevexHoodSel);
+    return tevexHoodsCsv.filter(e => normalizeName(e.modelo) === key);
   }, [tevexHoodSel, tevexHoodsCsv]);
   const csvAnchos = useMemo(() => {
     const mm = Array.from(new Set(csvEntriesForSel.map(e => e.anchoMm))).sort((a,b)=>a-b);
