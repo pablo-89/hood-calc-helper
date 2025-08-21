@@ -29,17 +29,8 @@ const formato = (n: number, dec = 2) =>
 // Normaliza nombres de modelo para comparar CSV vs selección (quita tildes y caracteres raros)
 const normalizeName = (s: string | undefined) => {
   if (!s) return "";
-  try {
-    return s
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9/ ]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  } catch {
-    return String(s).toUpperCase().replace(/\s+/g, ' ').trim();
-  }
+  const base = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return base.toUpperCase().replace(/[^A-Z0-9/ ]/g, '').replace(/\s+/g, ' ').trim();
 };
 
 const helperText = {
@@ -165,17 +156,25 @@ const Index = () => {
 
   const hoodOptions = useMemo(() => {
     const list = csvModelNames ?? [];
-    return list.length > 0 ? list : TEVEX_HOODS.map(h => h.modelo);
-  }, [csvModelNames]);
+    if (list.length > 0) return list;
+    // Fallback: derivar nombres a partir del CSV normalizado, si no hay csvModelNames aún
+    if (tevexHoodsCsv && tevexHoodsCsv.length > 0) {
+      const normToDisplay = new Map<string, string>();
+      for (const e of tevexHoodsCsv) {
+        const k = normalizeName(e.modelo);
+        if (!normToDisplay.has(k)) normToDisplay.set(k, e.modelo);
+      }
+      return Array.from(normToDisplay.values());
+    }
+    return TEVEX_HOODS.map(h => h.modelo);
+  }, [csvModelNames, tevexHoodsCsv]);
 
   const motorOptions = useMemo(() => {
     if (!tevexHoodSel) return [] as string[];
-    // Monoblock: puede traer MOTOR/VENTILADOR por ANCHO (independiente del FONDO)
     const isMonoblock = /monoblock/i.test(tevexHoodSel);
-    const entries = csvEntriesForSel.filter(e => (
-      (!selectedAnchoMm || e.anchoMm === selectedAnchoMm) &&
-      (isMonoblock ? true : (!selectedFondoMm || e.fondoMm === selectedFondoMm))
-    ));
+    // Si es Monoblock y no hay ancho seleccionado aún, mostrar todos los motores declarados para el modelo
+    const entriesBase = csvEntriesForSel.filter(e => (isMonoblock ? true : (!selectedFondoMm || e.fondoMm === selectedFondoMm)));
+    const entries = selectedAnchoMm ? entriesBase.filter(e => e.anchoMm === selectedAnchoMm) : entriesBase;
     const vals = entries.map(e => (e.motor || '').trim()).filter(Boolean);
     return Array.from(new Set(vals)).sort();
   }, [tevexHoodSel, csvEntriesForSel, selectedFondoMm, selectedAnchoMm]);
