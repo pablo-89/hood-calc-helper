@@ -18,7 +18,6 @@ import { computeBOM, defaultFanPrices } from "@/lib/budget";
 import { FANS } from "@/data/fans";
 import { TEVEX_HOODS, TEVEX_FANS } from "@/data/tevex";
 import { loadTevexHoodsFromCsv, type TevexHoodCsvEntry } from "@/lib/tevexCsv";
-import { TEVEX_CAJAS } from "@/data/tevex";
 import { TEVEX_CURVES, normalizeCurveKey } from "@/data/tevexCurves";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, ReferenceDot, ReferenceLine } from "recharts";
@@ -107,6 +106,7 @@ const Index = () => {
   const [tevexCajaExtraSel, setTevexCajaExtraSel] = useState<string | undefined>(undefined);
   const [tevexHoodsCsv, setTevexHoodsCsv] = useState<TevexHoodCsvEntry[] | undefined>(undefined);
   const [qRefFiltros, setQRefFiltros] = useState<number | undefined>(undefined);
+  const [qRefM3h, setQRefM3h] = useState<number | undefined>(undefined);
   const csvModelNames = useMemo(() => {
     if (!tevexHoodsCsv) return undefined;
     const set = new Set<string>();
@@ -126,6 +126,22 @@ const Index = () => {
     return mm;
   }, [csvEntriesForSel]);
   const [autoMotorCsv, setAutoMotorCsv] = useState<string | undefined>(undefined);
+  const uniqueCsvMotors = useMemo(() => {
+    if (!tevexHoodsCsv) return [] as string[];
+    const vals = tevexHoodsCsv.map(e => (e.motor || '').trim()).filter(Boolean);
+    return Array.from(new Set(vals)).sort();
+  }, [tevexHoodsCsv]);
+
+  const selectedCsvBestMatch = useMemo(() => {
+    if (!tevexHoodSel || !tevexHoodsCsv || !Number.isFinite(data.L) || !Number.isFinite(data.F)) return undefined as TevexHoodCsvEntry | undefined;
+    const entries = tevexHoodsCsv.filter(e => e.modelo === tevexHoodSel);
+    if (entries.length === 0) return undefined;
+    const Lmm = Math.round((data.L || 0) * 1000);
+    const Fmm = Math.round((data.F || 0) * 1000);
+    const scored = entries.map(e => ({ e, score: Math.abs(e.anchoMm - Lmm) + Math.abs(e.fondoMm - Fmm) }));
+    scored.sort((a,b)=>a.score - b.score);
+    return scored[0]?.e;
+  }, [tevexHoodSel, tevexHoodsCsv, data.L, data.F]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -173,15 +189,39 @@ const Index = () => {
 
   useEffect(() => {
     if (!tevexHoodSel) return;
+    // Autoselección de motor/caja basada en CSV si existe, si no, aplicar regla Monoblock
+    const candidate = selectedCsvBestMatch;
+    if (candidate?.motor) {
+      setAutoMotorCsv(candidate.motor);
+      setTevexMotorSel(candidate.motor);
+      setTevexCajaSel(candidate.motor);
+      return;
+    }
     const isMonoblock = /Monoblock/i.test(tevexHoodSel);
-    const isMonoblock400 = /400º\/?2H/i.test(tevexHoodSel);
     if (!isMonoblock) return;
+    const isMonoblock400 = /400º\/?2H/i.test(tevexHoodSel);
     import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
-      selectMotorForMonoblockExcelAware(tevexHoodSel, data.L, data.F, isMonoblock400).then(motor => {
-        if (motor) setTevexMotorSel(motor);
+      selectMotorForMonoblockExcelAware(tevexHoodSel!, data.L, data.F, isMonoblock400).then(motor => {
+        if (motor) { setAutoMotorCsv(motor); setTevexMotorSel(motor); setTevexCajaSel(motor); }
       });
     });
-  }, [tevexHoodSel, data.L, data.F]);
+  }, [tevexHoodSel, data.L, data.F, selectedCsvBestMatch]);
+
+  // Recalcular M3/H y Nº filtros según CSV cuando cambian L/F o el modelo seleccionado
+  useEffect(() => {
+    if (!tevexHoodSel) { setQRefFiltros(undefined); setQRefM3h(undefined); return; }
+    const match = selectedCsvBestMatch;
+    if (!match) { setQRefFiltros(undefined); setQRefM3h(undefined); return; }
+    const nextFiltros = Number.isFinite(match.filtros as any) ? Math.round(match.filtros as number) : undefined;
+    const nextM3h = Number.isFinite(match.m3h as any) ? Math.round(match.m3h as number) : undefined;
+    setQRefFiltros(nextFiltros != null ? nextFiltros * 1000 : undefined);
+    setQRefM3h(nextM3h);
+    // Preferir M3/H del CSV como caudal de diseño si existe; si no, usar filtros*1000
+    const preferredQ = nextM3h ?? (nextFiltros != null ? nextFiltros * 1000 : undefined);
+    if (preferredQ && data.caudalDiseno !== preferredQ) {
+      setData(d => ({ ...d, caudalDiseno: preferredQ }));
+    }
+  }, [tevexHoodSel, selectedCsvBestMatch]);
 
   useEffect(() => {
     // Intentar cargar curva real desde CSV en public/curvas/<modelo>.csv cuando hay selección TEVEX
@@ -781,40 +821,26 @@ const Index = () => {
                       <div>
                         <Label>Modelo TEVEX (opcional)</Label>
                         <Select value={tevexHoodSel ?? ""} onValueChange={(m) => {
-                                                      setTevexHoodSel(m);
+                            setTevexHoodSel(m);
                             const entries = (tevexHoodsCsv ?? []).filter(h => h.modelo === m);
                             const isCsv = entries.length > 0;
-                            const hood = isCsv ? undefined : TEVEX_HOODS.find(h => h.modelo === m);
-                            if (!isCsv && !hood) return;
-                            // construir listas desde el CSV si existen
-                            const widths = isCsv ? Array.from(new Set(entries.map(e => e.anchoMm))).sort((a,b)=>a-b) : [];
-                            const depths = isCsv ? Array.from(new Set(entries.map(e => e.fondoMm))).sort((a,b)=>a-b) : [];
-                            const anchoMM = isCsv ? (widths[0] ?? Math.round(((hood?.LdefaultM ?? data.L))*1000)) : Math.round(((hood!.LdefaultM ?? data.L))*1000);
-                            const fondoMM = isCsv ? (depths[0] ?? Math.round(((hood?.FdefaultM ?? data.F))*1000)) : Math.round(((hood!.FdefaultM ?? data.F))*1000);
-                            const anchoM = anchoMM / 1000;
-                            const fondoM = fondoMM / 1000;
-                            // Q de referencia por filtros (1 filtro ~ 1000 m³/h)
-                            let qRef: number | undefined = undefined;
+                            // Ajustar tipo campana por heurística si procede
+                            const tipoHeur = /central/i.test(m) ? "central" : /mural|pared/i.test(m) ? "mural" : undefined;
                             if (isCsv) {
-                              const match = entries.find(e => e.anchoMm === anchoMM && e.fondoMm === fondoMM) || entries[0];
-                              if (match?.filtros) qRef = Math.round(match.filtros) * 1000;
-                            }
-                            setQRefFiltros(qRef);
-                            setData((d) => ({ ...d, tipoCampana: (hood as any)?.tipo ?? d.tipoCampana, L: anchoM, F: fondoM, caudalDiseno: qRef ?? d.caudalDiseno }));
-                            // Autoselección de motor si el modelo incorpora motor o es Monoblock
-                            const isMonoblock = /Monoblock/i.test(m);
-                            const isMonoblock400 = /400º\/?2H/i.test(m);
-                            if (isMonoblock) {
-                              // si hay motor en CSV para este ancho, mostrarlo; si no, usar Excel como fallback
-                              const csvMatch = isCsv ? (entries.find(e => e.anchoMm === anchoMM && e.fondoMm === fondoMM) || entries.find(e => e.anchoMm === anchoMM)) : undefined;
-                              if (csvMatch?.motor) { setAutoMotorCsv(csvMatch.motor); setTevexMotorSel(csvMatch.motor); }
-                              else {
-                                import("@/lib/tevexMotorRules").then(({ selectMotorForMonoblockExcelAware }) => {
-                                  selectMotorForMonoblockExcelAware(m, anchoM, fondoM, isMonoblock400).then(motor => { if (motor) { setAutoMotorCsv(motor); setTevexMotorSel(motor); } });
-                                });
+                              // fijar L/F al mejor match del CSV para el modelo
+                              const best = (() => {
+                                const Lmm = Math.round((data.L || 0) * 1000);
+                                const Fmm = Math.round((data.F || 0) * 1000);
+                                const scored = entries.map(e => ({ e, score: Math.abs(e.anchoMm - Lmm) + Math.abs(e.fondoMm - Fmm) }));
+                                scored.sort((a,b)=>a.score - b.score);
+                                return scored[0]?.e || entries[0];
+                              })();
+                              if (best) {
+                                setData((d) => ({ ...d, L: best.anchoMm / 1000, F: best.fondoMm / 1000, tipoCampana: (tipoHeur as any) ?? d.tipoCampana }));
                               }
-                            } else if (hood && (hood as any).motorIncluidoModelo) {
-                              setTevexMotorSel((hood as any).motorIncluidoModelo);
+                            } else {
+                              const hood = TEVEX_HOODS.find(h => h.modelo === m);
+                              if (hood) setData((d) => ({ ...d, L: hood.LdefaultM, F: hood.FdefaultM, tipoCampana: hood.tipo }));
                             }
                         }}>
                           <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
@@ -824,17 +850,21 @@ const Index = () => {
                             ))}
                           </SelectContent>
                         </Select>
-                        {autoMotorCsv && /Monoblock/i.test(tevexHoodSel || '') ? (
-                          <div className="text-xs text-muted-foreground mt-1">Motor (auto por ancho): {autoMotorCsv}</div>
+                        {tevexHoodSel ? (
+                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                            {autoMotorCsv && (<div>Motor/Caja (auto): {autoMotorCsv}</div>)}
+                            {Number.isFinite(qRefFiltros as any) && (<div>N.º filtros: {Math.round(((qRefFiltros as number)/1000))}</div>)}
+                            {Number.isFinite(qRefM3h as any) && (<div>M3/H (CSV): {Math.round(qRefM3h as number)}</div>)}
+                          </div>
                         ) : null}
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
-                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(""); }} >
+                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(m); }} >
                           <SelectTrigger><SelectValue placeholder="Selecciona caja" /></SelectTrigger>
                           <SelectContent>
-                            {TEVEX_CAJAS.map(c => (
-                              <SelectItem key={c.modelo} value={c.modelo}>{c.modelo}</SelectItem>
+                            {uniqueCsvMotors.map(name => (
+                              <SelectItem key={name} value={name}>{name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -847,8 +877,8 @@ const Index = () => {
                             <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)}>
                               <SelectTrigger><SelectValue placeholder="Caja a comparar" /></SelectTrigger>
                               <SelectContent>
-                                {TEVEX_CAJAS.map(c => (
-                                  <SelectItem key={`cmp-${c.modelo}`} value={c.modelo}>{c.modelo}</SelectItem>
+                                {uniqueCsvMotors.map(name => (
+                                  <SelectItem key={`cmp-${name}`} value={name}>{name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
