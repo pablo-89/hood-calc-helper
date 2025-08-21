@@ -271,7 +271,7 @@ const Index = () => {
     const match = selectedCsvBestMatch;
     if (!match) { setQRefFiltros(undefined); setQRefM3h(undefined); return; }
     const nextFiltros = Number.isFinite(match.filtros as any) ? Math.round(match.filtros as number) : undefined;
-    const nextM3h = Number.isFinite(match.m3h as any) ? Math.round(match.m3h as number) : undefined;
+    const nextM3h = Number.isFinite((match as any).m3h) ? Math.round((match as any).m3h as number) : undefined;
     setQRefFiltros(nextFiltros != null ? nextFiltros * 1000 : undefined);
     setQRefM3h(nextM3h);
     // Preferir M3/H del CSV como caudal de diseño si existe; si no, usar filtros*1000

@@ -76,10 +76,16 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const iModelo = findIdx(c => c.includes('modelo') || c.includes('campana') || c.includes('nombre'));
   const iCodigo = findIdx(c => c.includes('cod') || c.includes('ref'));
   const iAncho = findIdx(c => c.includes('ancho') || c.includes('largo') || c.includes('width'));
-  const iFondo = findIdx(c => c.includes('fondo') || c.includes('profund') || c.includes('depth'));
   const iFiltros = findIdx(c => c.includes('filtro'));
   const iMotor = findIdx(c => c.includes('motor') || c.includes('ventilador'));
-  const iM3h = findIdx(c => c.includes('m3/h') || c.includes('m3h') || c.includes('m3') || c.includes('caudal'));
+  const allFondoIdxs = cols
+    .map((c, idx) => ({ c, idx }))
+    .filter(x => x.c.includes('fondo') || x.c.includes('profund') || x.c.includes('depth'))
+    .map(x => x.idx);
+  const allM3hIdxs = cols
+    .map((c, idx) => ({ c, idx }))
+    .filter(x => x.c.includes('m3/h') || x.c.includes('m3h') || x.c.includes('m3') || x.c.includes('caudal'))
+    .map(x => x.idx);
 
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
@@ -109,18 +115,31 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     const filtros = iFiltros >= 0 ? (parseNumberLike(parts[iFiltros]) ?? parseNumberLike(filtrosPos)) : parseNumberLike(filtrosPos);
     const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
     const motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
-    const m3h = iM3h >= 0 ? parseNumberLike(parts[iM3h]) : undefined;
 
-    // Fondos: cabecera estándar o múltiples por posiciones
-    if (iFondo >= 0) {
-      const fondoMm = parseNumberLike(parts[iFondo]);
-      if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h });
+    // Fondos y M3/H: soportar múltiples grupos por fila
+    if (allFondoIdxs.length > 0) {
+      // Asignar m3/h más cercano hacia la izquierda para cada FONDO
+      for (const fi of allFondoIdxs) {
+        const fondoMm = parseNumberLike(parts[fi]);
+        if (!anchoMm || !fondoMm) continue;
+        let nearestM3h: number | undefined = undefined;
+        // buscar índice de M3/H más cercano a fi (preferimos el último m3h <= fi)
+        const leftCandidates = allM3hIdxs.filter(mi => mi <= fi);
+        const rightCandidates = allM3hIdxs.filter(mi => mi > fi);
+        const pickIdx = leftCandidates.length > 0
+          ? leftCandidates[leftCandidates.length - 1]
+          : (rightCandidates.length > 0 ? rightCandidates[0] : undefined);
+        if (pickIdx !== undefined) {
+          nearestM3h = parseNumberLike(parts[pickIdx]);
+        }
+        out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h: nearestM3h });
+      }
     } else {
-      // intentar extraer de los grupos E/I/M/Q
+      // intentar extraer de los grupos E/I/M/Q (formato alternativo con fondo+referencia)
       const groups = [fondoRef1, fondoRef2, fondoRef3, fondoRef4].filter(Boolean);
       for (const g of groups) {
         const { fondoMm, referencia } = extractFondoYReferencia(g);
-        if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h, referencia });
+        if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, referencia });
       }
     }
   }
