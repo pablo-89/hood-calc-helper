@@ -124,6 +124,9 @@ const Index = () => {
     const mm = Array.from(new Set(csvEntriesForSel.map(e => e.fondoMm))).sort((a,b)=>a-b);
     return mm;
   }, [csvEntriesForSel]);
+  const allowedCombos = useMemo(() => {
+    return csvEntriesForSel.map(e => `${e.fondoMm}:${e.anchoMm}`);
+  }, [csvEntriesForSel]);
   const selectedAnchoMm = useMemo(() => Math.round((data.L || 0) * 1000), [data.L]);
   const selectedFondoMm = useMemo(() => Math.round((data.F || 0) * 1000), [data.F]);
   const csvAnchosForFondo = useMemo(() => {
@@ -167,6 +170,27 @@ const Index = () => {
     scored.sort((a,b)=>a.score - b.score);
     return scored[0]?.e;
   }, [tevexHoodSel, tevexHoodsCsv, data.L, data.F]);
+
+  // Si hay modelo seleccionado con CSV, forzar L/F a una combinación válida del CSV
+  useEffect(() => {
+    if (!tevexHoodSel || csvEntriesForSel.length === 0) return;
+    const Lmm = Math.round((data.L || 0) * 1000);
+    const Fmm = Math.round((data.F || 0) * 1000);
+    const key = `${Fmm}:${Lmm}`;
+    if (allowedCombos.includes(key)) return;
+    // Elegir combinación más cercana manteniendo el fondo si es posible
+    const sameFondo = csvEntriesForSel.filter(e => e.fondoMm === Fmm);
+    const candidateList = sameFondo.length > 0 ? sameFondo : csvEntriesForSel;
+    let best = candidateList[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const e of candidateList) {
+      const sc = Math.abs(e.fondoMm - Fmm) + Math.abs(e.anchoMm - Lmm);
+      if (sc < bestScore) { best = e; bestScore = sc; }
+    }
+    if (best) {
+      setData(d => ({ ...d, L: best.anchoMm / 1000, F: best.fondoMm / 1000 }));
+    }
+  }, [tevexHoodSel, csvEntriesForSel, allowedCombos, data.L, data.F]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -952,9 +976,12 @@ const Index = () => {
                         >
                           <SelectTrigger><SelectValue placeholder="Selecciona ancho" /></SelectTrigger>
                           <SelectContent>
-                            {csvAnchosForFondo.map((mm) => (
-                              <SelectItem key={`ancho-${mm}`} value={String(mm)}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
-                            ))}
+                            {csvAnchosForFondo.map((mm) => {
+                              const disabled = !csvEntriesForSel.some(e => e.fondoMm === Math.round((data.F||0)*1000) && e.anchoMm === mm);
+                              return (
+                                <SelectItem key={`ancho-${mm}`} value={String(mm)} disabled={disabled}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       ) : (
