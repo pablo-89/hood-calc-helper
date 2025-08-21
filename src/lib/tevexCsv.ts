@@ -5,6 +5,7 @@ export interface TevexHoodCsvEntry {
   fondoMm: number;
   filtros?: number;
   motor?: string;
+  m3h?: number;
   referencia?: string;
 }
 
@@ -33,6 +34,8 @@ function extractFondoYReferencia(raw: unknown): { fondoMm?: number; referencia?:
 export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   '/BSD-CAMP.CSV',
   '/bsd-camp.csv',
+  '/BSD-CAMP-CLEAN.csv',
+  '/bsd-camp-clean.csv',
   '/TARIFA_TEVEX_2024.csv',
   '/TARIFA TEVEX 2024.csv',
   '/TEVEX_CAMPANAS.csv',
@@ -40,9 +43,14 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   '/TARIFA TEVEX CAMPANAS.csv',
   '/public/BSD-CAMP.CSV',
   '/public/bsd-camp.csv',
+  '/public/BSD-CAMP-CLEAN.csv',
+  '/public/bsd-camp-clean.csv',
   '/public/TARIFA_TEVEX_2024.csv',
   '/public/TARIFA TEVEX 2024.csv',
   '/public/TEVEX_CAMPANAS.csv',
+  // Remote raw fallbacks
+  'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP-CLEAN.csv',
+  'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP.csv',
 ]): Promise<TevexHoodCsvEntry[] | undefined> {
   let txt: string | null = null;
   for (const path of possibleNames) {
@@ -72,6 +80,7 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const iFondo = findIdx(c => c.includes('fondo') || c.includes('profund') || c.includes('depth'));
   const iFiltros = findIdx(c => c.includes('filtro'));
   const iMotor = findIdx(c => c.includes('motor') || c.includes('ventilador'));
+  const iM3h = findIdx(c => c.includes('m3/h') || c.includes('m3h') || c.includes('m3') || c.includes('caudal'));
 
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
@@ -98,17 +107,18 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     const filtros = iFiltros >= 0 ? (parseNumberLike(parts[iFiltros]) ?? parseNumberLike(filtrosPos)) : parseNumberLike(filtrosPos);
     const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
     const motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
+    const m3h = iM3h >= 0 ? parseNumberLike(parts[iM3h]) : undefined;
 
     // Fondos: cabecera estándar o múltiples por posiciones
     if (iFondo >= 0) {
       const fondoMm = parseNumberLike(parts[iFondo]);
-      if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor });
+      if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h });
     } else {
       // intentar extraer de los grupos E/I/M/Q
       const groups = [fondoRef1, fondoRef2, fondoRef3, fondoRef4].filter(Boolean);
       for (const g of groups) {
         const { fondoMm, referencia } = extractFondoYReferencia(g);
-        if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, referencia });
+        if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h, referencia });
       }
     }
   }
