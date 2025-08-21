@@ -138,8 +138,13 @@ const Index = () => {
   }, [csvModelNames]);
 
   const motorOptions = useMemo(() => {
-    return uniqueCsvMotors;
-  }, [uniqueCsvMotors]);
+    // Preferir motores del modelo seleccionado; si no hay modelo, lista vacía
+    if (!tevexHoodSel) return [] as string[];
+    const entries = csvEntriesForSel;
+    const vals = entries.map(e => (e.motor || '').trim()).filter(Boolean);
+    const perModel = Array.from(new Set(vals)).sort();
+    return perModel;
+  }, [tevexHoodSel, csvEntriesForSel]);
 
   const selectedCsvBestMatch = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv || !Number.isFinite(data.L) || !Number.isFinite(data.F)) return undefined as TevexHoodCsvEntry | undefined;
@@ -198,14 +203,23 @@ const Index = () => {
 
   useEffect(() => {
     if (!tevexHoodSel) return;
-    // Autoselección de motor/caja basada en CSV si existe, si no, aplicar regla Monoblock
+    // Autoselección de motor/caja basada en CSV si existe (mejor match) o si hay un único motor disponible
     const candidate = selectedCsvBestMatch;
+    const perModelMotors = motorOptions;
     if (candidate?.motor) {
       setAutoMotorCsv(candidate.motor);
       setTevexMotorSel(candidate.motor);
       setTevexCajaSel(candidate.motor);
       return;
     }
+    if (perModelMotors.length === 1) {
+      const m = perModelMotors[0];
+      setAutoMotorCsv(m);
+      setTevexMotorSel(m);
+      setTevexCajaSel(m);
+      return;
+    }
+    // Si no hay motores definidos, aplicar regla Monoblock solo para modelos Monoblock
     const isMonoblock = /Monoblock/i.test(tevexHoodSel);
     if (!isMonoblock) return;
     const isMonoblock400 = /400º\/?2H/i.test(tevexHoodSel);
@@ -214,7 +228,7 @@ const Index = () => {
         if (motor) { setAutoMotorCsv(motor); setTevexMotorSel(motor); setTevexCajaSel(motor); }
       });
     });
-  }, [tevexHoodSel, data.L, data.F, selectedCsvBestMatch]);
+  }, [tevexHoodSel, data.L, data.F, selectedCsvBestMatch, motorOptions]);
 
   // Recalcular M3/H y Nº filtros según CSV cuando cambian L/F o el modelo seleccionado
   useEffect(() => {
