@@ -102,8 +102,7 @@ const Index = () => {
   const [tevexMotorSel, setTevexMotorSel] = useState<string | undefined>(undefined);
   const [tevexCajaSel, setTevexCajaSel] = useState<string | undefined>(undefined);
   const [curveVersion, setCurveVersion] = useState(0);
-  const [compararCaja, setCompararCaja] = useState(false);
-  const [tevexCajaExtraSel, setTevexCajaExtraSel] = useState<string | undefined>(undefined);
+  // comparar caja (eliminado)
   const [tevexHoodsCsv, setTevexHoodsCsv] = useState<TevexHoodCsvEntry[] | undefined>(undefined);
   const [qRefFiltros, setQRefFiltros] = useState<number | undefined>(undefined);
   const [qRefM3h, setQRefM3h] = useState<number | undefined>(undefined);
@@ -272,8 +271,7 @@ const Index = () => {
       } catch {}
     };
     tryLoad(tevexCajaSel);
-    tryLoad(tevexCajaExtraSel);
-  }, [tevexCajaSel, tevexCajaExtraSel]);
+  }, [tevexCajaSel]);
 
   const { results, filtroClamped, filtroDpTotal } = useMemo(() => {
     const Qsin = data.caudalDiseno && data.caudalDiseno > 0
@@ -357,12 +355,7 @@ const Index = () => {
     return gen as any;
   }, [results.fanModeloSugerido, selectedFiltro, tevexCajaSel, curveVersion]);
 
-  const fanChartModelExtra = useMemo(() => {
-    if (!compararCaja || !tevexCajaExtraSel) return undefined;
-    const key = normalizeCurveKey(tevexCajaExtraSel) ?? tevexCajaExtraSel;
-    if (TEVEX_CURVES[key]) return { modelo: key, curva: TEVEX_CURVES[key] } as any;
-    return undefined;
-  }, [compararCaja, tevexCajaExtraSel, curveVersion]);
+  // comparar caja eliminado
 
   const generateTicks = (min: number, max: number, count = 5) => {
     if (max <= min) return [min, max];
@@ -375,7 +368,6 @@ const Index = () => {
   const qTicks = useMemo(() => {
     const qs = [
       ...(fanChartModel?.curva.map(p => p.Q) ?? []),
-      ...(fanChartModelExtra?.curva.map(p => p.Q) ?? []),
     ];
     if (qs.length === 0) return undefined;
     const min = Math.min(...qs, Math.round(results.Q));
@@ -386,7 +378,6 @@ const Index = () => {
   const dpTicks = useMemo(() => {
     const dps = [
       ...(fanChartModel?.curva.map(p => p.dp) ?? []),
-      ...(fanChartModelExtra?.curva.map(p => p.dp) ?? []),
     ];
     if (dps.length === 0) return undefined;
     const min = 0;
@@ -410,21 +401,7 @@ const Index = () => {
     return out;
   }, [fanChartModel]);
 
-  const interpCurveExtra = useMemo(() => {
-    const c = fanChartModelExtra?.curva;
-    if (!c || c.length < 2) return [] as { q: number; dp: number }[];
-    const out: { q: number; dp: number }[] = [];
-    const stepsPerSeg = 10;
-    for (let i = 0; i < c.length - 1; i++) {
-      const a = c[i];
-      const b = c[i + 1];
-      for (let s = 0; s <= stepsPerSeg; s++) {
-        const t = s / stepsPerSeg;
-        out.push({ q: Math.round(a.Q + (b.Q - a.Q) * t), dp: Math.round(a.dp + (b.dp - a.dp) * t) });
-      }
-    }
-    return out;
-  }, [fanChartModelExtra]);
+  // comparar caja eliminado
 
   const systemCurve = useMemo(() => {
     // Δp = K * Q^2 passing through operation point
@@ -1421,34 +1398,17 @@ const Index = () => {
                 {fanChartModel && (
                   <div>
                     <h3 className="text-base font-medium mb-1">Curva ventilador (orientativa)</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Switch checked={compararCaja} onCheckedChange={setCompararCaja} />
-                        <span className="text-sm">Comparar caja</span>
-                      </div>
-                      {compararCaja && (
-                        <div>
-                          <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)}>
-                            <SelectTrigger><SelectValue placeholder="Caja a comparar" /></SelectTrigger>
-                            <SelectContent>
-                              {TEVEX_CAJAS.map(c => (
-                                <SelectItem key={`cmp-${c.modelo}`} value={c.modelo}>{c.modelo}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </div>
+                    {/* Comparar caja eliminado */}
                     <FanCurveChart
                       mainCurve={interpCurve.map(p => ({ q: p.q, dp: p.dp }))}
-                      extraCurve={compararCaja ? interpCurveExtra.map(p => ({ q: p.q, dp: p.dp })) : undefined}
+                      extraCurve={undefined}
                       systemCurve={systemCurve}
                       qTicks={qTicks}
                       dpTicks={dpTicks}
                       qOp={results.Q}
                       dpOp={results.deltaPtotal}
                       mainName={`Curva ventilador ${fanChartModel?.modelo ?? ""}`}
-                      extraName={fanChartModelExtra?.modelo}
+                      extraName={undefined}
                       tolBox={tolBox}
                     />
                     <p className="text-xs text-muted-foreground mt-1">Punto operación: Q={formato(results.Q,0)} m³/h, Δp={formato(results.deltaPtotal,0)} Pa</p>
