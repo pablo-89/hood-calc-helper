@@ -150,9 +150,11 @@ const Index = () => {
 
   const motorOptions = useMemo(() => {
     if (!tevexHoodSel) return [] as string[];
+    // Monoblock: puede traer MOTOR/VENTILADOR por ANCHO (independiente del FONDO)
+    const isMonoblock = /monoblock/i.test(tevexHoodSel);
     const entries = csvEntriesForSel.filter(e => (
-      (!selectedFondoMm || e.fondoMm === selectedFondoMm) &&
-      (!selectedAnchoMm || e.anchoMm === selectedAnchoMm)
+      (!selectedAnchoMm || e.anchoMm === selectedAnchoMm) &&
+      (isMonoblock ? true : (!selectedFondoMm || e.fondoMm === selectedFondoMm))
     ));
     const vals = entries.map(e => (e.motor || '').trim()).filter(Boolean);
     return Array.from(new Set(vals)).sort();

@@ -118,21 +118,17 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
 
     // Fondos y M3/H: soportar múltiples grupos por fila
     if (allFondoIdxs.length > 0) {
-      // Asignar m3/h más cercano hacia la izquierda para cada FONDO
+      // M3/H por fila (asociado al ANCHO). Tomar primer M3/H numérico de la fila
+      let rowM3h: number | undefined = undefined;
+      for (const mi of allM3hIdxs) {
+        const v = parseNumberLike(parts[mi]);
+        if (Number.isFinite(v as any)) { rowM3h = v; break; }
+      }
+      // Generar una entrada por cada FONDO usando el mismo M3/H
       for (const fi of allFondoIdxs) {
         const fondoMm = parseNumberLike(parts[fi]);
         if (!anchoMm || !fondoMm) continue;
-        let nearestM3h: number | undefined = undefined;
-        // buscar índice de M3/H más cercano a fi (preferimos el último m3h <= fi)
-        const leftCandidates = allM3hIdxs.filter(mi => mi <= fi);
-        const rightCandidates = allM3hIdxs.filter(mi => mi > fi);
-        const pickIdx = leftCandidates.length > 0
-          ? leftCandidates[leftCandidates.length - 1]
-          : (rightCandidates.length > 0 ? rightCandidates[0] : undefined);
-        if (pickIdx !== undefined) {
-          nearestM3h = parseNumberLike(parts[pickIdx]);
-        }
-        out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h: nearestM3h });
+        out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h: rowM3h });
       }
     } else {
       // intentar extraer de los grupos E/I/M/Q (formato alternativo con fondo+referencia)
