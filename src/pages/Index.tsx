@@ -930,56 +930,53 @@ const Index = () => {
                     </div>
                     <div>
                       <Label>Fondo (cm)</Label>
-                      {tevexHoodSel && csvEntriesForSel.length > 0 ? (
-                        <Select
-                          value={String(Math.round(data.F * 1000) || "")}
-                          onValueChange={(mmStr) => {
-                            const mm = parseInt(mmStr, 10);
-                            const m = (mm || 0) / 1000;
-                            // al cambiar fondo, si el ancho actual no es válido para este fondo, ajustarlo al primero válido
-                            const validAnchos = csvEntriesForSel.filter(e => e.fondoMm === mm).map(e => e.anchoMm);
-                            const anchoActualMm = Math.round((data.L || 0) * 1000);
-                            const nuevoAnchoMm = validAnchos.includes(anchoActualMm) ? anchoActualMm : (validAnchos.sort((a,b)=>a-b)[0] ?? anchoActualMm);
-                            setData((d) => ({ ...d, F: m, L: (nuevoAnchoMm || 0) / 1000 }));
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Selecciona fondo (cm)" /></SelectTrigger>
-                          <SelectContent>
-                            {csvFondos.map((mm) => (
-                              <SelectItem key={`fondo-${mm}`} value={String(mm)}>{`${(mm/10).toFixed(0)} cm`}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input type="number" step="1" value={Math.round((data.F||0)*100)}
-                          onChange={(e) => onChange("F", (parseFloat(e.target.value) || 0) / 100)} />
+                      <Select
+                        value={String(Math.round(data.F * 1000) || "")}
+                        onValueChange={(mmStr) => {
+                          const mm = parseInt(mmStr, 10);
+                          const m = (mm || 0) / 1000;
+                          const validAnchos = csvEntriesForSel.filter(e => e.fondoMm === mm).map(e => e.anchoMm);
+                          const anchoActualMm = Math.round((data.L || 0) * 1000);
+                          const nuevoAnchoMm = validAnchos.includes(anchoActualMm) ? anchoActualMm : (validAnchos.sort((a,b)=>a-b)[0] ?? anchoActualMm);
+                          setData((d) => ({ ...d, F: m, L: (nuevoAnchoMm || 0) / 1000 }));
+                        }}
+                        disabled={!tevexHoodSel || csvEntriesForSel.length === 0}
+                      >
+                        <SelectTrigger><SelectValue placeholder={(!tevexHoodSel || csvEntriesForSel.length===0) ? "Selecciona modelo" : "Selecciona fondo (cm)"} /></SelectTrigger>
+                        <SelectContent>
+                          {csvFondos.map((mm) => (
+                            <SelectItem key={`fondo-${mm}`} value={String(mm)}>{`${(mm/10).toFixed(0)} cm`}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {(!tevexHoodSel || csvEntriesForSel.length===0) && (
+                        <p className="text-xs text-muted-foreground mt-1">Primero selecciona un modelo TEVEX con medidas en CSV.</p>
                       )}
                       {validation.fieldErrors.F && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.F}</p>}
                     </div>
                     <div>
                       <Label>Ancho (cm)</Label>
-                      {tevexHoodSel && csvEntriesForSel.length > 0 ? (
-                        <Select
-                          value={String(Math.round(data.L * 1000) || "")}
-                          onValueChange={(mmStr) => {
-                            const mm = parseInt(mmStr, 10);
-                            const m = (mm || 0) / 1000;
-                            setData((d) => ({ ...d, L: m }));
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Selecciona ancho (cm)" /></SelectTrigger>
-                          <SelectContent>
-                            {csvAnchosForFondo.map((mm) => {
-                              const disabled = !csvEntriesForSel.some(e => e.fondoMm === Math.round((data.F||0)*1000) && e.anchoMm === mm);
-                              return (
-                                <SelectItem key={`ancho-${mm}`} value={String(mm)} disabled={disabled}>{`${(mm/10).toFixed(0)} cm`}</SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input type="number" step="1" value={Math.round((data.L||0)*100)}
-                          onChange={(e) => onChange("L", (parseFloat(e.target.value) || 0) / 100)} />
+                      <Select
+                        value={String(Math.round(data.L * 1000) || "")}
+                        onValueChange={(mmStr) => {
+                          const mm = parseInt(mmStr, 10);
+                          const m = (mm || 0) / 1000;
+                          setData((d) => ({ ...d, L: m }));
+                        }}
+                        disabled={!tevexHoodSel || csvEntriesForSel.length === 0}
+                      >
+                        <SelectTrigger><SelectValue placeholder={(!tevexHoodSel || csvEntriesForSel.length===0) ? "Selecciona modelo" : "Selecciona ancho (cm)"} /></SelectTrigger>
+                        <SelectContent>
+                          {csvAnchosForFondo.map((mm) => {
+                            const disabled = !csvEntriesForSel.some(e => e.fondoMm === Math.round((data.F||0)*1000) && e.anchoMm === mm);
+                            return (
+                              <SelectItem key={`ancho-${mm}`} value={String(mm)} disabled={disabled}>{`${(mm/10).toFixed(0)} cm`}</SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      {(!tevexHoodSel || csvEntriesForSel.length===0) && (
+                        <p className="text-xs text-muted-foreground mt-1">Primero selecciona un modelo TEVEX.</p>
                       )}
                       {validation.fieldErrors.L && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.L}</p>}
                     </div>
