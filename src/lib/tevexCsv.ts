@@ -84,6 +84,9 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
     const parts = line.split(/[,;\t]/).map(s => s.trim());
+    if (parts.length < 2) continue;
+    // Avoid lines that look like HTML
+    if (/<html[\s\S]*>/i.test(line)) continue;
 
     // Fallback por posiciones (A,B,C,D,E,F,I,J,M,N,Q,R) si faltan cabeceras
     const modeloPos = parts[0] || undefined; // A

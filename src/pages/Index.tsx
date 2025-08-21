@@ -132,6 +132,15 @@ const Index = () => {
     return Array.from(new Set(vals)).sort();
   }, [tevexHoodsCsv]);
 
+  const hoodOptions = useMemo(() => {
+    const list = csvModelNames ?? [];
+    return list.length > 0 ? list : TEVEX_HOODS.map(h => h.modelo);
+  }, [csvModelNames]);
+
+  const motorOptions = useMemo(() => {
+    return uniqueCsvMotors;
+  }, [uniqueCsvMotors]);
+
   const selectedCsvBestMatch = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv || !Number.isFinite(data.L) || !Number.isFinite(data.F)) return undefined as TevexHoodCsvEntry | undefined;
     const entries = tevexHoodsCsv.filter(e => e.modelo === tevexHoodSel);
@@ -845,7 +854,7 @@ const Index = () => {
                         }}>
                           <SelectTrigger><SelectValue placeholder="Selecciona modelo" /></SelectTrigger>
                           <SelectContent>
-                            {(csvModelNames ?? TEVEX_HOODS.map(h=>h.modelo)).map((name: string) => (
+                            {hoodOptions.map((name: string) => (
                               <SelectItem key={name} value={name}>{name}</SelectItem>
                             ))}
                           </SelectContent>
@@ -860,24 +869,27 @@ const Index = () => {
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
-                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(m); }} >
+                        <Select value={tevexCajaSel ?? ""} onValueChange={(m) => { setTevexCajaSel(m); setTevexMotorSel(m); }} disabled={motorOptions.length === 0}>
                           <SelectTrigger><SelectValue placeholder="Selecciona caja" /></SelectTrigger>
                           <SelectContent>
-                            {uniqueCsvMotors.map(name => (
+                            {motorOptions.map(name => (
                               <SelectItem key={name} value={name}>{name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        {motorOptions.length === 0 && (
+                          <div className="text-xs text-muted-foreground mt-1">Sin datos de motores en CSV. Verifique que BSD-CAMP-CLEAN.csv esté accesible.</div>
+                        )}
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="flex items-center gap-2">
                             <Switch checked={compararCaja} onCheckedChange={setCompararCaja} />
                             <span className="text-sm">Comparar caja</span>
                           </div>
                           {compararCaja && (
-                            <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)}>
+                            <Select value={tevexCajaExtraSel ?? ""} onValueChange={(m) => setTevexCajaExtraSel(m)} disabled={motorOptions.length === 0}>
                               <SelectTrigger><SelectValue placeholder="Caja a comparar" /></SelectTrigger>
                               <SelectContent>
-                                {uniqueCsvMotors.map(name => (
+                                {motorOptions.map(name => (
                                   <SelectItem key={`cmp-${name}`} value={name}>{name}</SelectItem>
                                 ))}
                               </SelectContent>
