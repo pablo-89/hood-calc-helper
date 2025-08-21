@@ -938,15 +938,51 @@ const Index = () => {
                       </Select>
                     </div>
                     <div>
-                      <Label>Longitud L (m)</Label>
-                      <Input type="number" step="0.01" value={data.L}
-                        onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
+                      <Label>Ancho (m)</Label>
+                      {tevexHoodSel && csvEntriesForSel.length > 0 ? (
+                        <Select
+                          value={String(Math.round(data.L * 1000) || "")}
+                          onValueChange={(mmStr) => {
+                            const mm = parseInt(mmStr, 10);
+                            const m = (mm || 0) / 1000;
+                            setData((d) => ({ ...d, L: m }));
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecciona ancho" /></SelectTrigger>
+                          <SelectContent>
+                            {csvAnchos.map((mm) => (
+                              <SelectItem key={`ancho-${mm}`} value={String(mm)}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input type="number" step="0.01" value={data.L}
+                          onChange={(e) => onChange("L", parseFloat(e.target.value) || 0)} />
+                      )}
                       {validation.fieldErrors.L && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.L}</p>}
                     </div>
                     <div>
-                      <Label>Fondo F (m)</Label>
-                      <Input type="number" step="0.01" value={data.F}
-                        onChange={(e) => onChange("F", parseFloat(e.target.value) || 0)} />
+                      <Label>Fondo (m)</Label>
+                      {tevexHoodSel && csvEntriesForSel.length > 0 ? (
+                        <Select
+                          value={String(Math.round(data.F * 1000) || "")}
+                          onValueChange={(mmStr) => {
+                            const mm = parseInt(mmStr, 10);
+                            const m = (mm || 0) / 1000;
+                            setData((d) => ({ ...d, F: m }));
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecciona fondo" /></SelectTrigger>
+                          <SelectContent>
+                            {csvFondos.map((mm) => (
+                              <SelectItem key={`fondo-${mm}`} value={String(mm)}>{`${(mm/1000).toFixed(2)} m`}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input type="number" step="0.01" value={data.F}
+                          onChange={(e) => onChange("F", parseFloat(e.target.value) || 0)} />
+                      )}
                       {validation.fieldErrors.F && <p className="text-xs text-red-600 mt-1">{validation.fieldErrors.F}</p>}
                     </div>
                     <div>
