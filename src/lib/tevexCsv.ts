@@ -32,23 +32,9 @@ function extractFondoYReferencia(raw: unknown): { fondoMm?: number; referencia?:
 }
 
 export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
-  '/BSD-CAMP.CSV',
-  '/bsd-camp.csv',
   '/BSD-CAMP-CLEAN.csv',
-  '/bsd-camp-clean.csv',
-  '/TARIFA_TEVEX_2024.csv',
-  '/TARIFA TEVEX 2024.csv',
-  '/TEVEX_CAMPANAS.csv',
-  '/campanas_tevex.csv',
-  '/TARIFA TEVEX CAMPANAS.csv',
-  '/public/BSD-CAMP.CSV',
-  '/public/bsd-camp.csv',
-  '/public/BSD-CAMP-CLEAN.csv',
-  '/public/bsd-camp-clean.csv',
-  '/public/TARIFA_TEVEX_2024.csv',
-  '/public/TARIFA TEVEX 2024.csv',
-  '/public/TEVEX_CAMPANAS.csv',
-  // Remote raw fallbacks
+  '/BSD-CAMP.csv',
+  // Remote raw fallbacks (GitHub)
   'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP-CLEAN.csv',
   'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP.csv',
 ]): Promise<TevexHoodCsvEntry[] | undefined> {
@@ -62,7 +48,20 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
           res = await fetch(encoded);
         }
       }
-      if (res.ok) { txt = await res.text(); break; }
+      if (res.ok) {
+        const ct = res.headers.get('content-type') || '';
+        const t = await res.text();
+        const looksHtml = ct.includes('text/html') || /<html[\s\S]*>/i.test(t);
+        if (looksHtml) {
+          continue;
+        }
+        // Ensure it has at least 2 non-empty lines
+        const lines = t.split(/\r?\n/).filter(Boolean);
+        if (lines.length >= 2) {
+          txt = t;
+          break;
+        }
+      }
     } catch (e) {
       console.debug('CSV fetch error', path, e);
     }
