@@ -89,41 +89,45 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     if (/<html[\s\S]*>/i.test(line)) continue;
     
     // Buscar líneas que contienen modelos de campanas
-    const modelMatch = line.match(/^\s*(CAMPANA\s+[^0-9]+?)(\s+\d+\/\d+\s+\d+\/\d+\s+cv)?\s+(\d{3,5})/i);
+    // Patrón: "CAMPANA [TIPO] [MODELO]" seguido de motor y ancho
+    const modelMatch = line.match(/^\s*(CAMPANA\s+[^0-9]+?)\s+([^0-9]+?)\s+(\d{3,5})/i);
     
     if (modelMatch) {
       const modeloCompleto = modelMatch[1].trim();
-      const motorInfo = modelMatch[2] ? modelMatch[2].trim() : undefined;
-      const primerAncho = parseInt(modelMatch[3], 10);
+      const motorInfo = modelMatch[2].trim();
+      const anchoMm = parseInt(modelMatch[3], 10);
       
       if (debugCount < 5) {
         console.log(`🔍 Debug línea ${debugCount + 1}:`, {
           linea: line.substring(0, 100) + '...',
           modeloCompleto,
           motorInfo,
-          primerAncho
+          anchoMm
         });
         debugCount++;
       }
       
-      // Extraer todos los números de la línea (anchos, filtros, m3h, fondos)
-      const nums = line.match(/\d{3,5}/g) || [];
-      if (nums.length >= 4) {
-        const anchoMm = parseInt(nums[0], 10);
+      // Extraer todos los números de la línea después del ancho
+      const allNumbers = line.match(/\d+/g) || [];
+      const anchoIndex = allNumbers.findIndex(n => parseInt(n, 10) === anchoMm);
+      
+      if (anchoIndex !== -1) {
+        // Los números después del ancho están en grupos de 3: [filtros, m3h, fondo]
+        const dataNumbers = allNumbers.slice(anchoIndex + 1);
         
         // Procesar grupos de datos (filtros, m3h, fondo) en grupos de 3
-        for (let i = 1; i + 2 < nums.length; i += 3) {
-          const filtros = parseInt(nums[i], 10);
-          const m3h = parseInt(nums[i + 1], 10);
-          const fondoMm = parseInt(nums[i + 2], 10);
+        for (let i = 0; i + 2 < dataNumbers.length; i += 3) {
+          const filtros = parseInt(dataNumbers[i], 10);
+          const m3h = parseInt(dataNumbers[i + 1], 10);
+          const fondoMm = parseInt(dataNumbers[i + 2], 10);
           
-          if (Number.isFinite(anchoMm) && Number.isFinite(fondoMm)) {
+          if (Number.isFinite(filtros) && Number.isFinite(m3h) && Number.isFinite(fondoMm)) {
             out.push({
               modelo: modeloCompleto,
               anchoMm,
               fondoMm,
-              filtros: Number.isFinite(filtros) ? filtros : undefined,
-              m3h: Number.isFinite(m3h) ? m3h : undefined,
+              filtros,
+              m3h,
               motor: motorInfo
             });
           }
