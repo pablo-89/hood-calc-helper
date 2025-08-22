@@ -39,6 +39,8 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP.csv',
 ]): Promise<TevexHoodCsvEntry[] | undefined> {
   let txt: string | null = null;
+  console.log('🔍 Intentando cargar CSV desde:', possibleNames);
+  
   for (const path of possibleNames) {
     try {
       let res = await fetch(path);
@@ -53,17 +55,19 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
         const t = await res.text();
         const looksHtml = ct.includes('text/html') || /<html[\s\S]*>/i.test(t);
         if (looksHtml) {
+          console.log('⚠️ Archivo HTML detectado, saltando:', path);
           continue;
         }
         // Ensure it has at least 2 non-empty lines
         const lines = t.split(/\r?\n/).filter(Boolean);
         if (lines.length >= 2) {
           txt = t;
+          console.log('✅ CSV cargado exitosamente desde:', path, 'Líneas:', lines.length);
           break;
         }
       }
     } catch (e) {
-      console.debug('CSV fetch error', path, e);
+      console.debug('❌ Error cargando CSV', path, e);
     }
   }
   if (!txt) return undefined;
@@ -88,6 +92,8 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     .map(x => x.idx);
 
   const out: TevexHoodCsvEntry[] = [];
+  let debugCount = 0;
+  
   for (const line of lines) {
     const parts = line.split(/[,;\t]/).map(s => s.trim());
     if (parts.length < 2) continue;
@@ -114,7 +120,7 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
     let anchoMm = iAncho >= 0 ? (parseNumberLike(parts[iAncho]) ?? parseNumberLike(anchoPos)) : (parseNumberLike(anchoPos));
     const filtros = iFiltros >= 0 ? (parseNumberLike(parts[iFiltros]) ?? parseNumberLike(filtrosPos)) : parseNumberLike(filtrosPos);
     const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
-    const motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
+    let motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
 
     // Fallback para CSV fijo por espacios: detectar números de la línea
     if (!anchoMm || allFondoIdxs.length === 0) {
@@ -122,14 +128,55 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
       if (nums.length >= 4) {
         const anchoToken = parseInt(nums[0], 10);
         if (Number.isFinite(anchoToken)) anchoMm = anchoToken;
-        const modelText = line.split(String(anchoToken))[0]?.trim();
-        if (modelText) modeloVal = modelText.replace(/\s+/g, ' ').trim();
+        
+        // Extraer modelo y motor de la parte antes del primer número
+        const beforeAncho = line.split(String(anchoToken))[0]?.trim();
+        if (beforeAncho) {
+          // Buscar patrón de motor (ej: "9/9 1/3 cv", "9/9 1/2 cv", etc.)
+          const motorMatch = beforeAncho.match(/(\d+\/\d+\s+\d+\/\d+\s+cv)/i);
+          const extractedMotor = motorMatch ? motorMatch[1].trim() : undefined;
+          
+          // El modelo es todo lo que está antes del motor (o toda la línea si no hay motor)
+          const modelText = motorMatch 
+            ? beforeAncho.replace(motorMatch[0], '').trim()
+            : beforeAncho;
+          
+          if (modelText) {
+            modeloVal = modelText.replace(/\s+/g, ' ').trim();
+          }
+          
+          // Usar el motor extraído si existe
+          if (extractedMotor) {
+            motor = extractedMotor;
+          }
+          
+          // Debug para las primeras 5 líneas procesadas
+          if (debugCount < 5 && modeloVal.includes('MONOBLOCK')) {
+            console.log(`🔍 Debug línea ${debugCount + 1}:`, {
+              linea: line.substring(0, 100) + '...',
+              modeloVal,
+              motor,
+              anchoMm,
+              beforeAncho: beforeAncho?.substring(0, 50) + '...'
+            });
+            debugCount++;
+          }
+        }
+        
         for (let i = 1; i + 2 < nums.length; i += 3) {
           const nf = parseInt(nums[i], 10);
           const m3 = parseInt(nums[i + 1], 10);
           const fondo = parseInt(nums[i + 2], 10);
           if (Number.isFinite(anchoMm) && Number.isFinite(fondo)) {
-            out.push({ modelo: modeloVal, codigo, anchoMm: anchoMm!, fondoMm: fondo, filtros: Number.isFinite(nf) ? nf : undefined, motor, m3h: Number.isFinite(m3) ? m3 : undefined });
+            out.push({ 
+              modelo: modeloVal, 
+              codigo, 
+              anchoMm: anchoMm!, 
+              fondoMm: fondo, 
+              filtros: Number.isFinite(nf) ? nf : undefined, 
+              motor: motor || extractedMotor, 
+              m3h: Number.isFinite(m3) ? m3 : undefined 
+            });
           }
         }
         continue;
@@ -159,5 +206,19 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
       }
     }
   }
+  
+  console.log(`📊 CSV procesado: ${out.length} entradas totales`);
+  const monoblockEntries = out.filter(e => /monoblock/i.test(e.modelo));
+  console.log(`🏭 Entradas Monoblock: ${monoblockEntries.length}`);
+  if (monoblockEntries.length > 0) {
+    console.log('🔧 Primeros 3 Monoblock:', monoblockEntries.slice(0, 3).map(e => ({
+      modelo: e.modelo,
+      ancho: e.anchoMm,
+      fondo: e.fondoMm,
+      motor: e.motor,
+      m3h: e.m3h
+    })));
+  }
+  
   return out;
 }
