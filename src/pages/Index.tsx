@@ -136,7 +136,10 @@ const Index = () => {
         ancho: e.anchoMm,
         fondo: e.fondoMm,
         motor: e.motor
-      }))
+      })),
+      // Mostrar algunos modelos disponibles para comparar
+      availableModels: [...new Set(tevexHoodsCsv.map(e => e.modelo))].slice(0, 10),
+      availableModelsNormalized: [...new Set(tevexHoodsCsv.map(e => normalizeName(e.modelo)))].slice(0, 10)
     });
     
     return filtered;
