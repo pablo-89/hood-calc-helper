@@ -127,12 +127,12 @@ const Index = () => {
     const key = normalizeName(tevexHoodSel);
     return tevexHoodsCsv.filter(e => normalizeName(e.modelo) === key);
   }, [tevexHoodSel, tevexHoodsCsv]);
-  const csvAnchos = useMemo(() => {
-    const mm = Array.from(new Set(csvEntriesForSel.map(e => e.anchoMm))).sort((a,b)=>a-b);
-    return mm;
-  }, [csvEntriesForSel]);
   const csvFondos = useMemo(() => {
     const mm = Array.from(new Set(csvEntriesForSel.map(e => e.fondoMm))).sort((a,b)=>a-b);
+    return mm;
+  }, [csvEntriesForSel]);
+  const csvAnchos = useMemo(() => {
+    const mm = Array.from(new Set(csvEntriesForSel.map(e => e.anchoMm))).sort((a,b)=>a-b);
     return mm;
   }, [csvEntriesForSel]);
   const allowedCombos = useMemo(() => {
@@ -171,13 +171,38 @@ const Index = () => {
 
   const motorOptions = useMemo(() => {
     if (!tevexHoodSel) return [] as string[];
+    
     const isMonoblock = /monoblock/i.test(tevexHoodSel);
-    // Si es Monoblock y no hay ancho seleccionado aún, mostrar todos los motores declarados para el modelo
-    const entriesBase = csvEntriesForSel.filter(e => (isMonoblock ? true : (!selectedFondoMm || e.fondoMm === selectedFondoMm)));
-    const entries = selectedAnchoMm ? entriesBase.filter(e => e.anchoMm === selectedAnchoMm) : entriesBase;
-    const vals = entries.map(e => (e.motor || '').trim()).filter(Boolean);
-    return Array.from(new Set(vals)).sort();
-  }, [tevexHoodSel, csvEntriesForSel, selectedFondoMm, selectedAnchoMm]);
+    
+    if (isMonoblock) {
+      // Para Monoblock: motor se determina por ancho, no por fondo
+      const entriesForAncho = csvEntriesForSel.filter(e => e.anchoMm === selectedAnchoMm);
+      const vals = entriesForAncho.map(e => (e.motor || '').trim()).filter(Boolean);
+      return Array.from(new Set(vals)).sort();
+    } else {
+      // Para modelos sin campana: mostrar todos los motores disponibles
+      const vals = csvEntriesForSel.map(e => (e.motor || '').trim()).filter(Boolean);
+      return Array.from(new Set(vals)).sort();
+    }
+  }, [tevexHoodSel, csvEntriesForSel, selectedAnchoMm]);
+
+  // M3/H disponible para la combinación ancho/fondo seleccionada
+  const m3hForSelection = useMemo(() => {
+    if (!tevexHoodSel || !selectedAnchoMm || !selectedFondoMm) return undefined;
+    const entry = csvEntriesForSel.find(e => 
+      e.anchoMm === selectedAnchoMm && e.fondoMm === selectedFondoMm
+    );
+    return entry?.m3h;
+  }, [tevexHoodSel, csvEntriesForSel, selectedAnchoMm, selectedFondoMm]);
+
+  // Número de filtros para la combinación seleccionada
+  const filtrosForSelection = useMemo(() => {
+    if (!tevexHoodSel || !selectedAnchoMm || !selectedFondoMm) return undefined;
+    const entry = csvEntriesForSel.find(e => 
+      e.anchoMm === selectedAnchoMm && e.fondoMm === selectedFondoMm
+    );
+    return entry?.filtros;
+  }, [tevexHoodSel, csvEntriesForSel, selectedAnchoMm, selectedFondoMm]);
 
   const selectedCsvBestMatch = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv || !Number.isFinite(data.L) || !Number.isFinite(data.F)) return undefined as TevexHoodCsvEntry | undefined;
@@ -956,10 +981,8 @@ const Index = () => {
                         onValueChange={(mmStr) => {
                           const mm = parseInt(mmStr, 10);
                           const m = (mm || 0) / 1000;
-                          const validAnchos = csvEntriesForSel.filter(e => e.fondoMm === mm).map(e => e.anchoMm);
-                          const anchoActualMm = Math.round((data.L || 0) * 1000);
-                          const nuevoAnchoMm = validAnchos.includes(anchoActualMm) ? anchoActualMm : (validAnchos.sort((a,b)=>a-b)[0] ?? anchoActualMm);
-                          setData((d) => ({ ...d, F: m, L: (nuevoAnchoMm || 0) / 1000 }));
+                          // Solo cambiar el fondo, no auto-ajustar el ancho
+                          setData((d) => ({ ...d, F: m }));
                         }}
                         disabled={!tevexHoodSel || csvEntriesForSel.length === 0}
                       >
