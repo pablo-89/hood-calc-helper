@@ -29,8 +29,28 @@ const formato = (n: number, dec = 2) =>
 // Normaliza nombres de modelo para comparar CSV vs selección (quita tildes y caracteres raros)
 const normalizeName = (s: string | undefined) => {
   if (!s) return "";
-  const base = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return base.toUpperCase().replace(/[^A-Z0-9/ ]/g, '').replace(/\s+/g, ' ').trim();
+  // Primero normalizar caracteres Unicode
+  let base = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Reemplazar caracteres problemáticos del CSV (caracteres de reemplazo Unicode)
+  base = base
+    .replace(/\uFFFD/g, 'O') // Carácter de reemplazo por O (ÓPTIMA -> OPTIMA)
+    .replace(/[]/g, 'A') // Carácter corrupto por A
+    .replace(/[]/g, 'E') // Carácter corrupto por E
+    .replace(/[]/g, 'I') // Carácter corrupto por I
+    .replace(/[]/g, 'O') // Carácter corrupto por O
+    .replace(/[]/g, 'U') // Carácter corrupto por U
+    .replace(/[]/g, 'N') // Carácter corrupto por N
+    .replace(/[]/g, 'A') // Carácter corrupto por A
+    .replace(/[]/g, 'E') // Carácter corrupto por E
+    .replace(/[]/g, 'I') // Carácter corrupto por I
+    .replace(/[]/g, 'O') // Carácter corrupto por O
+    .replace(/[]/g, 'U') // Carácter corrupto por U
+    .replace(/[]/g, 'N'); // Carácter corrupto por N
+  // Ser menos agresivo con la limpieza final - mantener más caracteres
+  return base.toUpperCase()
+    .replace(/[^A-Z0-9/\-\. ]/g, '') // Mantener guiones y puntos
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const helperText = {
@@ -125,7 +145,30 @@ const Index = () => {
   const csvEntriesForSel = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv) return [] as TevexHoodCsvEntry[];
     const key = normalizeName(tevexHoodSel);
-    return tevexHoodsCsv.filter(e => normalizeName(e.modelo) === key);
+    
+    // Debug específico para CAMPANA INDUCTORA CENTRAL
+    if (tevexHoodSel.includes('CAMPANA INDUCTORA CENTRAL')) {
+      console.log('=== DEBUG CAMPANA INDUCTORA CENTRAL ===');
+      console.log('tevexHoodSel:', tevexHoodSel);
+      console.log('normalized key:', key);
+      console.log('CSV entries with similar names:');
+      tevexHoodsCsv.forEach(e => {
+        const normalized = normalizeName(e.modelo);
+        if (normalized.includes('CAMPANA') || normalized.includes('INDUCTORA') || normalized.includes('CENTRAL')) {
+          console.log('  CSV:', e.modelo, '-> normalized:', normalized);
+        }
+      });
+    }
+    
+    const filtered = tevexHoodsCsv.filter(e => normalizeName(e.modelo) === key);
+    
+    if (tevexHoodSel.includes('CAMPANA INDUCTORA CENTRAL')) {
+      console.log('Filtered entries count:', filtered.length);
+      console.log('Filtered entries:', filtered);
+      console.log('=== END DEBUG ===');
+    }
+    
+    return filtered;
   }, [tevexHoodSel, tevexHoodsCsv]);
   const csvAnchos = useMemo(() => {
     const mm = Array.from(new Set(csvEntriesForSel.map(e => e.anchoMm))).sort((a,b)=>a-b);
@@ -216,9 +259,21 @@ const Index = () => {
     let cancelled = false;
     (async () => {
       try {
+        console.log('=== LOADING CSV ===');
+        console.log('Starting CSV load...');
         const rows = await loadTevexHoodsFromCsv();
-        if (!cancelled) setTevexHoodsCsv(rows ?? []);
-      } catch {
+        console.log('CSV load result:', rows);
+        console.log('CSV rows count:', rows?.length);
+        if (rows && rows.length > 0) {
+          console.log('First CSV entry:', rows[0]);
+          console.log('Sample models:', rows.slice(0, 5).map(r => r.modelo));
+        }
+        if (!cancelled) {
+          console.log('Setting CSV data...');
+          setTevexHoodsCsv(rows ?? []);
+        }
+      } catch (error) {
+        console.error('CSV loading error:', error);
         if (!cancelled) setTevexHoodsCsv([]);
       }
     })();
@@ -907,6 +962,28 @@ const Index = () => {
                             {Number.isFinite(qRefM3h as any) && (<div>M3/H (CSV): {Math.round(qRefM3h as number)}</div>)}
                           </div>
                         ) : null}
+                        {/* DEBUG BUTTON TEMPORAL */}
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="mt-2 text-xs"
+                          onClick={() => {
+                            console.log('=== DEBUG BUTTON CLICKED ===');
+                            console.log('tevexHoodSel:', tevexHoodSel);
+                            console.log('tevexHoodsCsv length:', tevexHoodsCsv?.length);
+                            console.log('csvEntriesForSel length:', csvEntriesForSel.length);
+                            console.log('csvEntriesForSel:', csvEntriesForSel);
+                            if (tevexHoodSel && tevexHoodsCsv) {
+                              console.log('All CSV models:', tevexHoodsCsv.map(e => e.modelo));
+                              console.log('Normalized tevexHoodSel:', normalizeName(tevexHoodSel));
+                              console.log('All normalized CSV models:', tevexHoodsCsv.map(e => normalizeName(e.modelo)));
+                              const directMatch = tevexHoodsCsv.filter(h => h.modelo === tevexHoodSel);
+                              console.log('Direct match (modelo === tevexHoodSel):', directMatch);
+                            }
+                          }}
+                        >
+                          Debug CSV
+                        </Button>
                       </div>
                       <div>
                         <Label>Caja de ventilación (TEVEX)</Label>
