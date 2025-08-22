@@ -5,7 +5,15 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Servir archivos estáticos normalmente
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Solo redirigir rutas de navegación que no son archivos estáticos
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+  force = false
