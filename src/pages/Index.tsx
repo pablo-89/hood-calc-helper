@@ -125,7 +125,21 @@ const Index = () => {
   const csvEntriesForSel = useMemo(() => {
     if (!tevexHoodSel || !tevexHoodsCsv) return [] as TevexHoodCsvEntry[];
     const key = normalizeName(tevexHoodSel);
-    return tevexHoodsCsv.filter(e => normalizeName(e.modelo) === key);
+    const filtered = tevexHoodsCsv.filter(e => normalizeName(e.modelo) === key);
+    
+    console.log(`🔍 Filtrando por modelo "${tevexHoodSel}":`, {
+      keyNormalized: key,
+      totalEntries: tevexHoodsCsv.length,
+      filteredEntries: filtered.length,
+      sampleFiltered: filtered.slice(0, 3).map(e => ({
+        modelo: e.modelo,
+        ancho: e.anchoMm,
+        fondo: e.fondoMm,
+        motor: e.motor
+      }))
+    });
+    
+    return filtered;
   }, [tevexHoodSel, tevexHoodsCsv]);
   const csvFondos = useMemo(() => {
     const mm = Array.from(new Set(csvEntriesForSel.map(e => e.fondoMm))).sort((a,b)=>a-b);
@@ -215,9 +229,14 @@ const Index = () => {
     let cancelled = false;
     (async () => {
       try {
+        console.log('🚀 Iniciando carga de CSV...');
         const rows = await loadTevexHoodsFromCsv();
-        if (!cancelled) setTevexHoodsCsv(rows ?? []);
-      } catch {
+        if (!cancelled) {
+          console.log('📦 CSV cargado en React:', rows?.length || 0, 'entradas');
+          setTevexHoodsCsv(rows ?? []);
+        }
+      } catch (error) {
+        console.error('❌ Error cargando CSV en React:', error);
         if (!cancelled) setTevexHoodsCsv([]);
       }
     })();
