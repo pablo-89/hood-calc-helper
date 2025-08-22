@@ -10,7 +10,29 @@ export interface TevexHoodCsvEntry {
 }
 
 function stripDiacritics(s: string): string {
-  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  if (!s) return "";
+  // Primero normalizar caracteres Unicode
+  let base = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Reemplazar caracteres problemáticos del CSV (caracteres de reemplazo Unicode)
+  base = base
+    .replace(/\uFFFD/g, 'O') // Carácter de reemplazo por O (ÓPTIMA -> OPTIMA)
+    .replace(/[]/g, 'A') // Carácter corrupto por A
+    .replace(/[]/g, 'E') // Carácter corrupto por E
+    .replace(/[]/g, 'I') // Carácter corrupto por I
+    .replace(/[]/g, 'O') // Carácter corrupto por O
+    .replace(/[]/g, 'U') // Carácter corrupto por U
+    .replace(/[]/g, 'N') // Carácter corrupto por N
+    .replace(/[]/g, 'A') // Carácter corrupto por A
+    .replace(/[]/g, 'E') // Carácter corrupto por E
+    .replace(/[]/g, 'I') // Carácter corrupto por I
+    .replace(/[]/g, 'O') // Carácter corrupto por O
+    .replace(/[]/g, 'U') // Carácter corrupto por U
+    .replace(/[]/g, 'N'); // Carácter corrupto por N
+  // Ser menos agresivo con la limpieza final - mantener más caracteres
+  return base.toUpperCase()
+    .replace(/[^A-Z0-9/\-\. ]/g, '') // Mantener guiones y puntos
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function parseNumberLike(value: unknown): number | undefined {
@@ -37,127 +59,142 @@ export async function loadTevexHoodsFromCsv(possibleNames: string[] = [
   // Remote raw fallbacks (GitHub)
   'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP-CLEAN.csv',
   'https://raw.githubusercontent.com/pablo-89/hood-calc-helper/main/public/BSD-CAMP.csv',
-]): Promise<TevexHoodCsvEntry[] | undefined> {
+ ]): Promise<TevexHoodCsvEntry[] | undefined> {
+  console.log('=== CSV LOADER DEBUG ===');
+  console.log('Trying paths:', possibleNames);
+  
   let txt: string | null = null;
   for (const path of possibleNames) {
     try {
+      console.log('Trying path:', path);
       let res = await fetch(path);
+      console.log('Response status:', res.status, res.statusText);
+      console.log('Response headers:', Object.fromEntries(res.headers.entries()));
+      
       if (!res.ok) {
+        console.log('Response not OK, trying encoded...');
         const encoded = encodeURI(path);
         if (encoded !== path) {
           res = await fetch(encoded);
+          console.log('Encoded response status:', res.status, res.statusText);
         }
       }
+      
       if (res.ok) {
         const ct = res.headers.get('content-type') || '';
+        console.log('Content-Type:', ct);
         const t = await res.text();
+        console.log('Response text length:', t.length);
+        console.log('First 200 chars:', t.substring(0, 200));
+        
         const looksHtml = ct.includes('text/html') || /<html[\s\S]*>/i.test(t);
         if (looksHtml) {
+          console.log('Looks like HTML, skipping...');
           continue;
         }
+        
         // Ensure it has at least 2 non-empty lines
         const lines = t.split(/\r?\n/).filter(Boolean);
+        console.log('Lines count:', lines.length);
         if (lines.length >= 2) {
           txt = t;
+          console.log('CSV content loaded successfully');
           break;
+        } else {
+          console.log('Not enough lines, skipping...');
         }
       }
     } catch (e) {
-      console.debug('CSV fetch error', path, e);
+      console.error('CSV fetch error for path:', path, e);
     }
   }
-  if (!txt) return undefined;
+  
+  if (!txt) {
+    console.log('No CSV content found');
+    return undefined;
+  }
+  
+  console.log('Processing CSV content...');
   const lines = txt.split(/\r?\n/).filter(Boolean);
-  if (lines.length === 0) return [];
-  const header = lines.shift()!;
-  const rawCols = header.split(/[,;\t]/).map(s => s.trim());
-  const cols = rawCols.map(c => stripDiacritics(c.toLowerCase()));
-  const findIdx = (pred: (c: string) => boolean) => cols.findIndex(pred);
-  const iModelo = findIdx(c => c.includes('modelo') || c.includes('campana') || c.includes('nombre'));
-  const iCodigo = findIdx(c => c.includes('cod') || c.includes('ref'));
-  const iAncho = findIdx(c => c.includes('ancho') || c.includes('largo') || c.includes('width'));
-  const iFiltros = findIdx(c => c.includes('filtro'));
-  const iMotor = findIdx(c => c.includes('motor') || c.includes('ventilador'));
-  const allFondoIdxs = cols
-    .map((c, idx) => ({ c, idx }))
-    .filter(x => x.c.includes('fondo') || x.c.includes('profund') || x.c.includes('depth'))
-    .map(x => x.idx);
-  const allM3hIdxs = cols
-    .map((c, idx) => ({ c, idx }))
-    .filter(x => x.c.includes('m3/h') || x.c.includes('m3h') || x.c.includes('m3') || x.c.includes('caudal'))
-    .map(x => x.idx);
-
+  if (lines.length === 0) {
+    console.log('No lines to process');
+    return [];
+  }
+  
+  // El CSV tiene formato de tabla con espacios fijos, no separadores CSV estándar
+  // Vamos a parsear línea por línea extrayendo los campos por posición
+  console.log('Parsing fixed-width format...');
+  
   const out: TevexHoodCsvEntry[] = [];
   for (const line of lines) {
-    const parts = line.split(/[,;\t]/).map(s => s.trim());
-    if (parts.length < 2) continue;
-    // Avoid lines that look like HTML
-    if (/<html[\s\S]*>/i.test(line)) continue;
-
-    // Fallback por posiciones (A,B,C,D,E,F,I,J,M,N,Q,R) si faltan cabeceras
-    const modeloPos = parts[0] || undefined; // A
-    const motorPos = parts[1] || undefined; // B
-    const anchoPos = parts[2] || undefined; // C
-    const filtrosPos = parts[3] || undefined; // D
-    const fondoRef1 = parts[4] || undefined; // E
-    const precio1 = parts[5] || undefined; // F (no usado)
-    const fondoRef2 = parts[8] || undefined; // I
-    const precio2 = parts[9] || undefined; // J (no usado)
-    const fondoRef3 = parts[12] || undefined; // M
-    const precio3 = parts[13] || undefined; // N (no usado)
-    const fondoRef4 = parts[16] || undefined; // Q
-    const precio4 = parts[17] || undefined; // R (no usado)
-
-    let modeloVal = iModelo >= 0 ? (parts[iModelo] || modeloPos) : (modeloPos || parts[0] || '');
-    if (!modeloVal) continue;
-
-    let anchoMm = iAncho >= 0 ? (parseNumberLike(parts[iAncho]) ?? parseNumberLike(anchoPos)) : (parseNumberLike(anchoPos));
-    const filtros = iFiltros >= 0 ? (parseNumberLike(parts[iFiltros]) ?? parseNumberLike(filtrosPos)) : parseNumberLike(filtrosPos);
-    const codigo = iCodigo >= 0 ? parts[iCodigo] : undefined;
-    const motor = iMotor >= 0 ? parts[iMotor] : (motorPos || undefined);
-
-    // Fallback para CSV fijo por espacios: detectar números de la línea
-    if (!anchoMm || allFondoIdxs.length === 0) {
-      const nums = line.match(/\d{3,5}/g) || [];
-      if (nums.length >= 4) {
-        const anchoToken = parseInt(nums[0], 10);
-        if (Number.isFinite(anchoToken)) anchoMm = anchoToken;
-        const modelText = line.split(String(anchoToken))[0]?.trim();
-        if (modelText) modeloVal = modelText.replace(/\s+/g, ' ').trim();
-        for (let i = 1; i + 2 < nums.length; i += 3) {
-          const nf = parseInt(nums[i], 10);
-          const m3 = parseInt(nums[i + 1], 10);
-          const fondo = parseInt(nums[i + 2], 10);
-          if (Number.isFinite(anchoMm) && Number.isFinite(fondo)) {
-            out.push({ modelo: modeloVal, codigo, anchoMm: anchoMm!, fondoMm: fondo, filtros: Number.isFinite(nf) ? nf : undefined, motor, m3h: Number.isFinite(m3) ? m3 : undefined });
-          }
-        }
+    // Skip header lines and empty lines
+    if (line.trim().length === 0 || line.includes('MODELO') || line.includes('ANCHO') || line.includes('FILTROS')) {
+      continue;
+    }
+    
+    // Skip lines that look like HTML or are too short
+    if (/<html[\s\S]*>/i.test(line) || line.length < 20) {
+      continue;
+    }
+    
+    try {
+      // Parse fixed-width format based on the structure we saw
+      // Ajustando posiciones basándome en los logs de debug
+      const modelo = line.substring(0, 50).trim();
+      const anchoStr = line.substring(50, 80).trim();
+      const filtrosStr = line.substring(80, 100).trim();
+      const m3hStr = line.substring(100, 130).trim(); // Ajustado: más ancho para capturar M3/H
+      const fondoStr = line.substring(130, 160).trim(); // Ajustado: más ancho para capturar FONDO
+      
+      // Debug: log first few lines to see what we're getting
+      if (out.length < 3) {
+        console.log('Parsing line:', line.substring(0, 150));
+        console.log('  modelo:', `"${modelo}"`);
+        console.log('  anchoStr:', `"${anchoStr}"`);
+        console.log('  filtrosStr:', `"${filtrosStr}"`);
+        console.log('  m3hStr:', `"${m3hStr}"`);
+        console.log('  fondoStr:', `"${fondoStr}"`);
+      }
+      
+      // Skip if no modelo or if it's just whitespace
+      if (!modelo || modelo.length === 0 || /^\s*$/.test(modelo)) {
         continue;
       }
-    }
-
-    // Fondos y M3/H: soportar múltiples grupos por fila (con cabeceras)
-    if (allFondoIdxs.length > 0) {
-      // M3/H por fila (asociado al ANCHO). Tomar primer M3/H numérico de la fila
-      let rowM3h: number | undefined = undefined;
-      for (const mi of allM3hIdxs) {
-        const v = parseNumberLike(parts[mi]);
-        if (Number.isFinite(v as any)) { rowM3h = v; break; }
+      
+      // Parse numbers
+      const anchoMm = parseNumberLike(anchoStr);
+      const filtros = parseNumberLike(filtrosStr);
+      const m3h = parseNumberLike(m3hStr);
+      const fondoMm = parseNumberLike(fondoStr);
+      
+      // Debug: log parsed numbers
+      if (out.length < 3) {
+        console.log('  parsed anchoMm:', anchoMm);
+        console.log('  parsed filtros:', filtros);
+        console.log('  parsed m3h:', m3h);
+        console.log('  parsed fondoMm:', fondoMm);
       }
-      // Generar una entrada por cada FONDO usando el mismo M3/H
-      for (const fi of allFondoIdxs) {
-        const fondoMm = parseNumberLike(parts[fi]);
-        if (!anchoMm || !fondoMm) continue;
-        out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, m3h: rowM3h });
+      
+      // Only add if we have valid dimensions
+      if (anchoMm && fondoMm) {
+        out.push({
+          modelo: modelo.replace(/\s+/g, ' ').trim(),
+          anchoMm,
+          fondoMm,
+          filtros,
+          m3h
+        });
       }
-    } else {
-      // intentar extraer de los grupos E/I/M/Q (formato alternativo con fondo+referencia)
-      const groups = [fondoRef1, fondoRef2, fondoRef3, fondoRef4].filter(Boolean);
-      for (const g of groups) {
-        const { fondoMm, referencia } = extractFondoYReferencia(g);
-        if (anchoMm && fondoMm) out.push({ modelo: modeloVal, codigo, anchoMm, fondoMm, filtros, motor, referencia });
-      }
+    } catch (e) {
+      console.log('Error parsing line:', line.substring(0, 100), e);
+      continue;
     }
   }
+  
+  console.log('Parsed entries:', out.length);
+  if (out.length > 0) {
+    console.log('Sample parsed entry:', out[0]);
+  }
+  
   return out;
 }
